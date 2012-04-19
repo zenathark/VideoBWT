@@ -16,15 +16,15 @@ for l=level:-1:1
         for x=(C/2^l)+1:C/2^(l-1)
             parent_x = ceil(x/2);
             parent_y = ceil(y/2);
-            if (parent_x<C/2^level && parent_y<R/2^level) || zt(parent_y,parent_x) == 0
+            if (parent_x<=C/2^level && parent_y<=R/2^level) || zt(parent_y,parent_x) == 0
                 out(bit_bucket) = wave(y,x);
                 bit_bucket=bit_bucket+1;
-                if wave(y,x) == 0 && y<size(zt,1) && x<size(zt,2)
+                if wave(y,x) == 0 && y<=size(zt,1) && x<=size(zt,2)
                     if  zt(y,x) == 0
                         out(bit_bucket) = 0;
                         bit_bucket=bit_bucket+1;
                     else
-                        if (parent_x<C/2^level && parent_y<R/2^level) || zt(parent_y,parent_x) == 0
+                        if (parent_x<=C/2^level && parent_y<=R/2^level) || zt(parent_y,parent_x) == 0
                             out(bit_bucket) = 1;
                             bit_bucket=bit_bucket+1;
                         end
@@ -37,15 +37,15 @@ for l=level:-1:1
         for x=1:C/2^(l-1)
             parent_x = ceil(x/2);
             parent_y = ceil(y/2);
-            if (parent_x<C/2^level && parent_y<R/2^level) || zt(parent_y,parent_x) == 0
+            if (parent_x<=C/2^level && parent_y<=R/2^level) || zt(parent_y,parent_x) == 0
                 out(bit_bucket) = wave(y,x);
                 bit_bucket=bit_bucket+1;
-                if wave(y,x) == 0 && y<size(zt,1) && x<size(zt,2)
+                if wave(y,x) == 0 && y<=size(zt,1) && x<=size(zt,2)
                     if zt(y,x) == 0
                         out(bit_bucket) = 0;
                         bit_bucket=bit_bucket+1;
                     else
-                        if (parent_x<C/2^level && parent_y<R/2^level) || zt(parent_y,parent_x) == 0
+                        if (parent_x<=C/2^level && parent_y<=R/2^level) || zt(parent_y,parent_x) == 0
                             out(bit_bucket) = 1;
                             bit_bucket=bit_bucket+1;
                         end
@@ -54,6 +54,7 @@ for l=level:-1:1
             end
         end 
     end
-    compressed_string = out(1:bit_bucket-1);
+end
+compressed_string = out(1:bit_bucket-1);
 end
 
