@@ -14,7 +14,7 @@ end
 for l=level:-1:1
     for y=1:R/2^l
         for x=(C/2^l)+1:C/2^(l-1)
-            parenb t_x = ceil(x/2);
+            parent_x = ceil(x/2);
             parent_y = ceil(y/2);
             if (parent_x<=C/2^level && parent_y<=R/2^level) || zt(parent_y,parent_x) == 0
                 out(bit_bucket) = wave(y,x);

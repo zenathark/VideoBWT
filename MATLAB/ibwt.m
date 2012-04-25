@@ -7,6 +7,8 @@ for l=level:-1:1
     switch name
         case 1
             im(1:s/l,1:s/l) = ibwtg12d(im(1:s/l,1:s/l));
+        case 2
+            im(1:s/l,1:s/l) = ibwtg22d(im(1:s/l,1:s/l));
     end
 end
 

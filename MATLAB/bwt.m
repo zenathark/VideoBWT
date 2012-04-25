@@ -6,8 +6,9 @@ dec = signal;
 for l=1:level
     switch name
         case 1
-            dec(1:s/l,1:s/l) = bwtg12d(dec(1:s/l,1:s/l));
+            dec(1:s/2^(l-1),1:s/2^(l-1)) = bwtg12d(dec(1:s/2^(l-1),1:s/2^(l-1)));
+        case 2
+            dec(1:s/2^(l-1),1:s/2^(l-1)) = bwtg22d(dec(1:s/2^(l-1),1:s/2^(l-1)));
     end
 end
-
 end
