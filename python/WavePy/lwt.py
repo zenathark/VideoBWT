@@ -5,6 +5,7 @@ Created on 03/06/2012
 '''
 
 import numpy as np
+import math
 
 if __name__ == '__main__':
     pass
@@ -17,6 +18,14 @@ def cdf97(signal, in_place = True):
     signal = forward(signal,1/1.149604398,-1.586134342,-0.05298011854,0.8829110762,0.4435068522)
     return forward(signal.T,1/1.149604398,-1.586134342,-0.05298011854,0.8829110762,0.4435068522).T
 
+def cdf53(signal, in_place = True):
+    if not isinstance(signal, np.ndarray) or signal.ndim != 2:
+        raise TypeError, "Signal expected as 2D ndarray (numpy)"
+    if not in_place:
+        signal = signal.copy()
+    signal = forward(signal,math.sqrt(2),-0.5,0.25)
+    return forward(signal.T,math.sqrt(2),-0.5,0.25).T
+
 def icdf97(signal, in_place = True):
     if not isinstance(signal, np.ndarray) or signal.ndim != 2:
         raise TypeError, "Signal expected as 2D ndarray (numpy)"
@@ -24,6 +33,14 @@ def icdf97(signal, in_place = True):
         signal = signal.copy()
     signal = inverse(signal.T,1.149604398,-0.4435068522,-0.8829110762,0.05298011854,1.586134342).T
     return inverse(signal,1.149604398,-0.4435068522,-0.8829110762,0.05298011854,1.586134342)
+
+def icdf53(signal, in_place = True):
+    if not isinstance(signal, np.ndarray) or signal.ndim != 2:
+        raise TypeError, "Signal expected as 2D ndarray (numpy)"
+    if not in_place:
+        signal = signal.copy()
+    signal = inverse(signal.T,1/math.sqrt(2),-0.25,0.5).T
+    return inverse(signal,1/math.sqrt(2),-0.25,0.5)
 
 def forward(signal, scale_coeff, *coeff):
     if not isinstance(signal, np.ndarray) or signal.ndim != 2:

@@ -12,8 +12,8 @@ for i in range(0,32):
     l[:,i] = i
 m = l.copy()
 
-l = cdf97(l)
-l = icdf97(l)
+l = cdf53(l)
+l = icdf53(l)
 
 print m - l
 
