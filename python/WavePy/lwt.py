@@ -1,48 +1,70 @@
 '''
-Created on 03/06/2012
-
 @author: zenathar
 '''
 
 import numpy as np
 import math
+import wavelet as wv
 
 if __name__ == '__main__':
     pass
 
-def cdf97(signal, in_place = True):
+def cdf97(signal, level = 1,  in_place = True):
     if not isinstance(signal, np.ndarray) or signal.ndim != 2:
         raise TypeError, "Signal expected as 2D ndarray (numpy)"
     if not in_place:
         signal = signal.copy()
-    signal = forward(signal,1/1.149604398,-1.586134342,-0.05298011854,0.8829110762,0.4435068522)
-    return forward(signal.T,1/1.149604398,-1.586134342,-0.05298011854,0.8829110762,0.4435068522).T
+    signal = normal_forward(signal,level,1/1.149604398,(-1.586134342,-0.05298011854,0.8829110762,0.4435068522))
+    return wv.wavelet2D(signal,level)
 
-def cdf53(signal, in_place = True):
+def cdf53(signal, level = 1, in_place = True):
     if not isinstance(signal, np.ndarray) or signal.ndim != 2:
         raise TypeError, "Signal expected as 2D ndarray (numpy)"
     if not in_place:
         signal = signal.copy()
-    signal = forward(signal,math.sqrt(2),-0.5,0.25)
-    return forward(signal.T,math.sqrt(2),-0.5,0.25).T
+    signal = normal_forward(signal,level,math.sqrt(2),(-0.5,0.25))
+    return wv.wavelet2D(signal,level)
 
-def icdf97(signal, in_place = True):
-    if not isinstance(signal, np.ndarray) or signal.ndim != 2:
-        raise TypeError, "Signal expected as 2D ndarray (numpy)"
+def icdf97(wave, in_place = True):
+    if not isinstance(wave, wv.wavelet2D):
+        raise TypeError, "Signal expected as wavelet2D"
+    signal = wave.data
     if not in_place:
         signal = signal.copy()
-    signal = inverse(signal.T,1.149604398,-0.4435068522,-0.8829110762,0.05298011854,1.586134342).T
-    return inverse(signal,1.149604398,-0.4435068522,-0.8829110762,0.05298011854,1.586134342)
+    signal = normal_inverse(signal,wave.level,1.149604398,(-0.4435068522,-0.8829110762,0.05298011854,1.586134342))
+    return signal
 
-def icdf53(signal, in_place = True):
-    if not isinstance(signal, np.ndarray) or signal.ndim != 2:
-        raise TypeError, "Signal expected as 2D ndarray (numpy)"
+def icdf53(wave, in_place = True):
+    if not isinstance(wave, wv.wavelet2D):
+        raise TypeError, "Signal expected as wavelet2D"
+    signal = wave.data
     if not in_place:
         signal = signal.copy()
-    signal = inverse(signal.T,1/math.sqrt(2),-0.25,0.5).T
-    return inverse(signal,1/math.sqrt(2),-0.25,0.5)
+    signal = normal_inverse(signal,wave.level,1/math.sqrt(2),(-0.25,0.5))
+    return signal
 
-def forward(signal, scale_coeff, *coeff):
+def normal_forward(signal, level,  scale_coeff, coeff):
+    decomposed_signal = signal
+    for x in range(level):
+        forward(decomposed_signal, scale_coeff, coeff)
+        decomposed_signal = forward(decomposed_signal.T, scale_coeff, coeff).T
+        updated_rows = int(len(decomposed_signal) / 2)
+        updated_cols = int(len(decomposed_signal[0]) / 2)
+        decomposed_signal = decomposed_signal[:updated_rows,:updated_cols]
+    return signal
+
+def normal_inverse(signal, level, scale_coeff, coeff):
+    updated_rows = len(signal) / 2 **(level-1)
+    updated_cols = len(signal[0]) / 2 **(level-1)
+    for x in range(level):
+        recomposed_signal = signal[:updated_rows,:updated_cols]
+        recomposed_signal = inverse(recomposed_signal.T, scale_coeff, coeff).T
+        recomposed_signal = inverse(recomposed_signal, scale_coeff, coeff)
+        updated_rows = updated_rows * 2
+        updated_cols = updated_cols * 2
+    return signal
+
+def forward(signal, scale_coeff, coeff):
     if not isinstance(signal, np.ndarray) or signal.ndim != 2:
         raise TypeError, "Signal expected as 2D ndarray (numpy)"
     if len(coeff) <= 0:
@@ -63,7 +85,7 @@ def forward(signal, scale_coeff, *coeff):
     signal = sort(signal)
     return signal
 
-def inverse(signal, scale_coeff, *coeff):
+def inverse(signal, scale_coeff, coeff):
     if not isinstance(signal, np.ndarray) or signal.ndim != 2:
         raise TypeError, "Signal expected as 2D ndarray (numpy)"
     if len(coeff) <= 0:
@@ -82,7 +104,6 @@ def inverse(signal, scale_coeff, *coeff):
         signal[:,1:-1:2] += coeff[i+1] * (signal[:,:-2:2] + signal[:,2::2])
         signal[:,-1] += 2 * coeff[i+1] * signal[:,-2]
     return signal
-    
 
 def sort(signal):
     to = signal.shape[1]
