@@ -27,7 +27,7 @@ class wavelet2D(object):
         if not isinstance(data, np.ndarray) or data.ndim != 2:
             raise TypeError, "data must be a 2D numpy array matrix"
         self.level = level
-        self.type = w_type
+        self.w_type = w_type
         self.data = data
         
     def getHH(self):
