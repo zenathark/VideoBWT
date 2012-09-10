@@ -35,14 +35,42 @@ def bitplane_encoding_n(wavelet, varsize):
 def inv_bitplane_encoding_n(stream,rows,cols,varsize):
     wavelet = np.zeros((rows,cols),dtype = np.int16)
     LSP = list(it.product(range(rows),range(cols)))
-    import pdb; pdb.set_trace();
     stream.reverse()
     for i in range(varsize):
         wavelet = inv_bitplane_encoding(stream, LSP, wavelet, i)
     return wavelet
 
-def has_sons(ij,wavelet, typ = bool):
-    if scalar_tuple(2,ij) < (len(wavelet.data),len(wavelet.data[0])):
+#Get descendants, Pearlman named this set D
+def get_D(ij,wavelet):
+    D = []
+    O = get_O(ij,wavelet)
+    D += O
+    window_size = 4
+    while O:
+    #while np.all((4 * root) < max_root):
+        reverse_D = D[::-1]
+        for i in range(window_size):
+            O = get_O(reverse_D[i],wavelet)
+            D += O
+        window_size *= 4 #Window size increases as rows x 2 and cols x 2
+    return D
+
+#Get offsprings of ij, Pearlman named this set O
+def get_O(ij,wavelet):
+    O = []
+    if has_offspring(ij,wavelet):
+        O += [2*ij, 2*ij+(1,0), 2*ij+(0,1), 2*ij+(1,1)]
+    return O
+
+#Get all subsets of ij decendants O,D and L
+def get_DOL(ij,wavelet):
+    O = get_O(ij,wavelet)
+    D = get_D(ij,wavelet)
+    L = D[4:]
+    return D, O, L
+
+def has_offspring(ij,wavelet, typ = bool):
+    if np.all(2*ij < (len(wavelet.data),len(wavelet.data[0]))):
         if typ == bool:
             return True
         else:
@@ -51,22 +79,13 @@ def has_sons(ij,wavelet, typ = bool):
         if typ == bool:
             return False
         else:
-            return 0
-
-def tuple_to_Array(a):
-    return np.array([a[0],a[1]])
-
-def add_tuple(a,b):
-    return list(tuple_to_array(a),tuple_to_array(b))
-
-def scalar_tuple(k,a):
-    return list(k * tuple_to_array(a))
+            return 1
 
 def fill_zerotree(root,wavelet,threshold):
     l = [root]
     c = 1
     while True:
-        if has_sons(l[-c]):
+        if has_offspring(l[-c]):
             for i in range(c).reverse():
                 son = get_sons(l[i])
                 l += son[1]
@@ -76,27 +95,19 @@ def fill_zerotree(root,wavelet,threshold):
             c *= 2
         else:
             break
-    tree = {}
+    tree = tuple(root)
     l.reverse()
     for i in range(c):
         p = l.pop()
         tree[p] =  (((wavelet.data[p[0],p[1]] >> threshold) & 1) == 0)
     if not not l:
         for c in l:
-            son = get_sons(c)
-            tree[c] = (((wavelet.data[c[0],c[1]] >> threshold) & 1) == 0) && \\
-                    tree[son[1]] && tree[son[2]] && tree[son[3]] && tree[son[4]]
+            son = get_offspring(c)
+            tree[c] = ((((wavelet.data[c[0],c[1]] >> threshold) & 1) == 0) & tree[son[1]] & tree[son[2]] & tree[son[3]] & tree[son[4]])
     return tree
 
 def is_zerotree(tree,ij):
     return tree[ij[0:2]] 
-
-def get_sons(c):
-    son1 += scalar_tuple(2,c)
-    son2 += add_tuple(scalar_tuple(2,c), (1,0))
-    son3 += add_tuple(scalar_tuple(2,c), (0,1))
-    son4 += add_tuple(scalar_tuple(2,c), (1,0))
-    return [son1,son2,son3,son4]
  
 class SPIHT(object):
     '''
@@ -108,37 +119,89 @@ class SPIHT(object):
 
     def init(self):
         maxs = abs(self.wavelet.data)
-        self.n = math.log(maxs.max(),2)
-        self.LSP = np.array([], np.int16)
+        self.n = int(math.log(maxs.max(),2))
+        self.LSP = []
         rows = len(self.wavelet.data) / 2 ** (self.wavelet.level-1 )
         cols = len(self.wavelet.data[0]) / 2 ** (self.wavelet.level-1)
-        self.LIP = list(it.product(range(rows),range(cols)))
-        self.LIS = list(it.product(range(rows/2),range(cols/2,cols),'A'))
-#Append merges all sublists into one big vector, remember using LIS[1::2] for columns
-#and LIS[0::2] for rows
-        self.LIS += list(it.product(range(rows/2,rows),range(cols/2),'A'))
-        self.LIS += list(it.product(range(rows/2,rows),range(cols/2,cols),'A'))
+        self.LIP = []
+        for i in  list(it.product(range(rows),range(cols))):
+            self.LIP += [np.array(i)]
+        LIS = []
+        LIS = list(it.product(range(rows/2),range(cols/2,cols)))
+        LIS += list(it.product(range(rows/2,rows),range(cols/2)))
+        LIS += list(it.product(range(rows/2,rows),range(cols/2,cols)))
+        self.LIS = []
+        for i in LIS:
+            self.LIS += [np.array(i)]
+        self.LIS_type = ["A" for i in range(len(LIS))]
         return
 
     def S_n(self, Tau):
-        T = np.append(Tau,np.array([],np.int16))
-        return (abs(self.wavelet.data[T[0::2],T[1::2]]).max() >> int(self.n)) & 1
+        T = np.array([i.tolist() for i in Tau])
+        return (abs(self.wavelet.data[T[:,0],T[:,1]]).max() >> int(self.n)) & 1
+
+#outputs coefficient sign
+    def out_sign(self, coeff):
+        if self.wavelet.data[coeff[0],coeff[1]] > 0:
+            return 0
+        else:
+            return 1
 
     def sorting(self):
-        nextLSP = []
+        nextLSP = []                                                    
+        #Check for each significant pixel on the LIP
         for ij in self.LIP:
-            out = self.S_n(ij)
-            self.output_stream += out
+            out = self.S_n([ij])
+            self.output_stream += [out]
             if out == 1:
                 nextLSP += [ij]
+                self.ouput_stream += [output_sign(ij)]
+        #Remove new Significant pixels from LIP list
+        #This is done after the output so the for loop doesnt have any problem
         for ij in nextLSP:
             self.LIP.remove(ij)
-        zero_tree = {}
+        remove_from_LIS = []
+        c = -1
         for ij in self.LIS:
-            zero_tree = dict(zero_tree.items() + is_zerotree(ij,self.wavelet,self.n).items())
-        for ij in self.LIS:
-            if ij[3] == 'A':
-                out = self.S_n(ij[0:2])
+            c+=1
+        #Check for zerotree roots (2.2.1)
+            D, O, L = get_DOL(ij,self.wavelet)
+            if self.LIS_type == 'A':
+                out = self.S_n(D)
                 self.output_stream += out
+                if out == 1:
+                    for kl in O:
+                        out = self.S_n([kl])
+                        self.output_stream += [out]
+                        if out == 1:
+                            nextLSP += [kl]
+                            self.output_stream += [output_sign(kl)]
+                        else:
+                            self.LIP += [o]
+                #Check if ij has grandsons, if not remove from LIS
+                    if L:
+                        self.LIS += [ij]
+                        self.LIS_type += "B"
+                    else:
+                        pass
+                    remove_from_LIS += [c]
+            else: #Entry is type B
+                out = self.S_n(L)
+                self.output_stream += [out]
+                if out == 1:
+                    self.LIS += O
+                    self.LIS_type += ["A" for i in range(4)]
+                    remove_from_LIS += [c]
+        return remove_from_LIS
 
+    def compress(self):
+        self.init()
+        r = range(self.n + 1)
+        r.reverse()
+        for i in r:
+            erase = self.sorting()
+            self.output_stream += bitplane_encoding_n(self.wavelet,i)
+            for c in erase:
+                self.LIS.pop(c)
+                self.LIS_type.pop(c)
 
