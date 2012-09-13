@@ -5,7 +5,21 @@ Created on 02/06/2012
 '''
 import numpy as np
 from numpy import array 
-import pdb
+import math
+
+def get_z_order(dim):
+    mtx = []
+    n = int(math.log(dim,2))
+    pows = range(int(n/2))
+    for i in range(dim):
+        x = 0
+        y = 0
+        for j in pows:
+            x |= ((i >> 2*j) & 1) << j 
+            y |= ((i >> 2*j+1) & 1) << j 
+        mtx += [vector((y,x))]
+    return mtx
+
 
 class wavelet(object):
     def __init__(self):
@@ -91,3 +105,43 @@ class wavelet2D(object):
         _subband = self.getLL(self.data[:rows, :cols])
         return _subband
 
+class vector(object):
+    def __init__(self, data, entry_type = "-"):
+        if isinstance(data,np.ndarray):
+            self.data = data
+        else:
+            self.data = np.array(data)
+        self.entry_type = type
+
+    def __hash__(self):
+        return hash(tuple(self.data))
+
+    def __add__(self, other):
+        if isinstance(other,np.ndarray):
+            return vector(self.data + other.data)
+        else:
+            return vector(self.data + np.array(other))
+
+    def __str__(self):
+        return self.data.__str__()
+
+    def __repr__(self):
+        return self.data.__repr__()
+
+    def __mul__(self,other):
+        return vector(self.data * other)
+
+    def __rmul__(self,other):
+        return vector(self.data * other)
+
+    def __lt__(self, other):
+        if (isinstance(other,np.ndarray)):
+            return np.all(self.data < other)
+        else:
+            return np.all(self.data < np.array(other))
+
+    def tolist(self):
+        return self.data.tolist()
+
+    def __getitem__(self,index):
+        return self.data[index]
