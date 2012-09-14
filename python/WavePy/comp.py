@@ -127,9 +127,9 @@ class SPIHT(object):
             i.entry_type = "A"
         return
 
-    def S_n(self, Tau):
+    def S_n(self, Tau, n):
         T = np.array([i.tolist() for i in Tau])
-        return (abs(self.wavelet.data[T[:,0],T[:,1]]).max() >> int(self.n)) & 1
+        return (abs(self.wavelet.data[T[:,0],T[:,1]]).max() >> int(n)) & 1
 
 #outputs coefficient sign
     def out_sign(self, coeff):
@@ -138,14 +138,14 @@ class SPIHT(object):
         else:
             return 1
 
-    def sorting(self):
+    def sorting(self, n):
         nextLSP = []                                                    
         removeLIP = []
         #Check for each significant pixel on the LIP
         c = -1
         for ij in self.LIP:
             c += 1
-            out = self.S_n([ij])
+            out = self.S_n([ij], n)
             self.output_stream += [out]
             if out == 1:
                 nextLSP += [ij]
@@ -160,11 +160,11 @@ class SPIHT(object):
         #Check for zerotree roots (2.2.1)
             D, O, L = get_DOL(ij,self.wavelet)
             if ij.entry_type == 'A':
-                out = self.S_n(D)
+                out = self.S_n(D,n)
                 self.output_stream += [out]
                 if out == 1:
                     for kl in O:
-                        out = self.S_n([kl])
+                        out = self.S_n([kl],n)
                         self.output_stream += [out]
                         if out == 1:
                             nextLSP += [kl]
@@ -179,7 +179,7 @@ class SPIHT(object):
                         pass
                     remove_from_LIS += [ij]
             else: #Entry is type B
-                out = self.S_n(L)
+                out = self.S_n(L,n)
                 self.output_stream += [out]
                 if out == 1:
                     for k in O:
@@ -194,20 +194,21 @@ class SPIHT(object):
     def compress(self):
         maxs = abs(self.wavelet.data)
         self.n = int(math.log(maxs.max(),2))
+        n = self.n
         self.init()
         bit_bucket = self.bpp * len(self.wavelet.data) * len(self.wavelet.data[0])
         self.output_stream=buffer([],bit_bucket)
         #self.output_stream = []
-        while self.n >= 0:
+        while n >= 0:
             try:
-                newLSP = self.sorting()
-                bitplane_encoding(self.wavelet,self.LSP,self.n,self.output_stream)
+                newLSP = self.sorting(n)
+                bitplane_encoding(self.wavelet,self.LSP,n,self.output_stream)
                 self.LSP += newLSP
-                self.n -= 1
+                n -= 1
             except NameError:
                 return
 
-    def inv_sorting(self):
+    def inv_sorting(self,n):
         nextLSP = []
         #Fill each significant pixel
         removeLIP = []
@@ -215,7 +216,7 @@ class SPIHT(object):
             out = self.output_stream.pop()
             if out == 1:
                 nextLSP += [ij]
-                self.wavelet.data[ij[0],ij[1]] |= (1 << self.n)
+                self.wavelet.data[ij[0],ij[1]] |= (1 << n)
                 sign = self.output_stream.pop()
                 if sign:
                     self.wavelet.data[ij[0],ij[1]] *= -1
@@ -233,7 +234,7 @@ class SPIHT(object):
                         if out == 1:
                             nextLSP += [kl]
                             sign = self.output_stream.pop()
-                            self.wavelet.data[kl[0],kl[1]] |= (1 << self.n)
+                            self.wavelet.data[kl[0],kl[1]] |= (1 << n)
                             if sign:
                                 self.wavelet.data[kl[0],kl[1]] *= -1
                         else:
@@ -260,12 +261,13 @@ class SPIHT(object):
     def uncompress(self):
         self.init()
         self.output_stream.reverse()
-        while self.n >= 0:
+        n = self.n
+        while n >= 0:
             try:
-                newLSP = self.inv_sorting()
-                inv_bitplane_encoding(self.output_stream,self.LSP,self.wavelet, self.n)
+                newLSP = self.inv_sorting(n)
+                inv_bitplane_encoding(self.output_stream,self.LSP,self.wavelet, n)
                 self.LSP += newLSP
-                self.n -= 1
+                n -= 1
             except IndexError:
                 break
                     
