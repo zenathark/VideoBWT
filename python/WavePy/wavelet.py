@@ -71,7 +71,7 @@ class wavelet2D(object):
         '''
         Returns the subband LH of a wavelet assuming one level of decomposition
         '''
-        data1 = subdata[len(subdata) / 2:,len(subdata[0]) / 2:]
+        data1 = subdata[int(len(subdata) / 2):,int(len(subdata[0]) / 2):]
         return data1
 
     def getLH_n(self, level):
@@ -108,17 +108,47 @@ class wavelet2D(object):
         return _subband
 
     def show(self):
+        temp = self.data
         #temporal wavelet copy
         w = self.data.copy()
+        rows = len(w)
+        cols = len(w[0])
         #scaling coefficients for display
-        height = len(w)
-        width = len(w[0])
-        band = w[:int(height/2**self.level),:int(width/2**self.level)]
-        m = band.min() 
-        M = band.max() + m
-        band = (band + m) / M * 255
+        #HH first
+        #hh = self.getHH()
+        #m = w.min() 
+        #M = w.max() - m
+        #hh[:] = (hh - m) / M * 255
+        m = w.min()
+        M = w.max() - m
+        w = (w - m) / M * 255
+        #Now all bands
+        for i in reversed(range(1,self.level+1)):
+            #HL
+            hl = w[rows/2**i:rows/2**(i-1),:cols/2**i]
+            m = hl.min()
+            M = hl.max() - m
+            hl[:] = (hl - m) / M * 255
+            #LH
+            lh = w[:rows/2**i,cols/2**i:cols/2**(i-1)]
+            m = lh.min()
+            M = lh.max() - m
+            lh[:] = (lh - m) / M * 255
+            #HL
+            hh = w[rows/2**i:rows/2**(i-1),cols/2**i:cols/2**(i-1)]
+            m = hh.min()
+            M = hh.max() - m
+            hh[:] = (hh - m) / M * 255
+
+        #change type to uint8
+        w_ui8 = w.view(np.uint8)
+        w_ui8_d = w_ui8[:,::2] 
+        w_ui8_d[:] = w
+        w = w_ui8_d
+        self.data = temp
+        #show with a thread
         wm = WindowManager(1)
-        wm.img = cv.fromarray(w)
+        wm.img = cv.fromarray(w.copy())
         wm.name = "ASDADS"
         wm.start()
         wm.join()
