@@ -6,6 +6,8 @@ Created on 02/06/2012
 import numpy as np
 from numpy import array 
 import math
+import cv
+import threading
 
 def get_z_order(dim):
     mtx = []
@@ -104,6 +106,40 @@ class wavelet2D(object):
         cols = len(self.data[0]) / 2 ** level
         _subband = self.getLL(self.data[:rows, :cols])
         return _subband
+
+    def show(self):
+        #temporal wavelet copy
+        w = self.data.copy()
+        #scaling coefficients for display
+        height = len(w)
+        width = len(w[0])
+        band = w[:int(height/2**self.level),:int(width/2**self.level)]
+        m = band.min() 
+        M = band.max() + m
+        band = (band + m) / M * 255
+        wm = WindowManager(1)
+        wm.img = cv.fromarray(w)
+        wm.name = "ASDADS"
+        wm.start()
+        wm.join()
+
+class WindowManager(threading.Thread):
+
+    img = 0
+    name = "Empty"
+
+    def __init__(self, num):
+        threading.Thread.__init__(self)
+        self.num = num
+
+    def run(self):
+        cv.ShowImage(self.name,self.img)
+        while True:
+            key = cv.WaitKey(0)
+            if key == -1:
+                cv.DestroyWindow(self.name)
+                print self.name + " destroyed..."
+                break
 
 class vector(object):
     def __init__(self, data, entry_type = "-"):

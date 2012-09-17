@@ -44,9 +44,16 @@ class codec(object):
 
 #TODO:
     def cframe_to_file(self):
+        pass
+
     def unzip_from_file(self): #to a file
+        pass
+
     def zip_from_video_file(self): #to a file
+        pass
+
     def play_from_file(self)
+        pass
 
 class compressed_frame(object):
     def __init__(self, payload, max_n, size, decomp_level)
