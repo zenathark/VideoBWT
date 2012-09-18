@@ -114,8 +114,12 @@ class SPIHT(object):
     '''
 
     bpp = 0
-    def __init__(self, wavelet):
-        self.wavelet = wavelet
+    def __init__(self, wavelet, delta = 0.001):
+        ints = [np.int, np.int16, np.int32, np.int64]
+        if wavelet.data.dtype in ints:
+            self.wavelet = wavelet
+        else:
+            self.wavelet = quant(wavelet,delta)
 
     def init(self):
         self.LSP = []
@@ -280,6 +284,7 @@ class buffer(list):
 
     def __iadd__(self, other):
         if len(self) <= self.size:
+            print( float(len(self)) / self.size)
             return buffer(self + other,self.size)
         else:
             raise NameError("Stream full")
@@ -289,3 +294,9 @@ class buffer(list):
             super(buffer,self).append(other)
         else:
             raise NameError("Stream full")
+
+def quant(wavelet,delta):
+    iw = np.zeros((len(wavelet.data),len(wavelet.data[0])),np.int)
+    iw= np.array(np.trunc(wavelet.data / delta), np.int)
+    wavelet.data = iw
+    return wavelet

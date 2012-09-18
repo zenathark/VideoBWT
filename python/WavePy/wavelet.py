@@ -107,51 +107,47 @@ class wavelet2D(object):
         _subband = self.getLL(self.data[:rows, :cols])
         return _subband
 
-    def show(self):
+    def show(self, name):
         temp = self.data
         #temporal wavelet copy
         w = self.data.copy()
         rows = len(w)
         cols = len(w[0])
         #scaling coefficients for display
-        #HH first
-        #hh = self.getHH()
-        #m = w.min() 
-        #M = w.max() - m
-        #hh[:] = (hh - m) / M * 255
         m = w.min()
         M = w.max() - m
-        w = (w - m) / M * 255
+        w = (w - m) / float(M) * 255
         #Now all bands
         for i in reversed(range(1,self.level+1)):
             #HL
             hl = w[rows/2**i:rows/2**(i-1),:cols/2**i]
             m = hl.min()
             M = hl.max() - m
-            hl[:] = (hl - m) / M * 255
+            if not M==0:
+                hl[:] = (hl - m) / float(M) * 255
             #LH
             lh = w[:rows/2**i,cols/2**i:cols/2**(i-1)]
             m = lh.min()
             M = lh.max() - m
-            lh[:] = (lh - m) / M * 255
+            if not M==0:
+                lh[:] = (lh - m) / float(M) * 255
             #HL
             hh = w[rows/2**i:rows/2**(i-1),cols/2**i:cols/2**(i-1)]
             m = hh.min()
             M = hh.max() - m
-            hh[:] = (hh - m) / M * 255
-
+            if not M == 0:
+                hh[:] = (hh - m) / float(M) * 255
         #change type to uint8
         w_ui8 = w.view(np.uint8)
-        w_ui8_d = w_ui8[:,::2] 
+        w_ui8_d = w_ui8[:,::w.dtype.itemsize] 
         w_ui8_d[:] = w
         w = w_ui8_d
         self.data = temp
         #show with a thread
         wm = WindowManager(1)
         wm.img = cv.fromarray(w.copy())
-        wm.name = "ASDADS"
+        wm.name = name
         wm.start()
-        wm.join()
 
 class WindowManager(threading.Thread):
 
@@ -166,10 +162,9 @@ class WindowManager(threading.Thread):
         cv.ShowImage(self.name,self.img)
         while True:
             key = cv.WaitKey(0)
-            if key == -1:
-                cv.DestroyWindow(self.name)
-                print self.name + " destroyed..."
-                break
+            cv.DestroyWindow(self.name)
+            print self.name + " destroyed..."
+            break
 
 class vector(object):
     def __init__(self, data, entry_type = "-"):
@@ -211,3 +206,22 @@ class vector(object):
 
     def __getitem__(self,index):
         return self.data[index]
+
+def LoadImageRGB(filename):
+    mtx = cv.LoadImageM(filename)
+    return splitRGB(mtx)
+
+def splitRGB(image):
+    k = np.asarray(image)
+    r = k[:,:,0].copy()
+    g = k[:,:,1].copy()
+    b = k[:,:,2].copy()
+    return (r,g,b)
+
+
+def fuseRGB(ch):
+    mtx = np.zeros((len(ch[0]),len(ch[0][0]),3))
+    mtx[:,:,0] = ch[0].copy()
+    mtx[:,:,1] = ch[1].copy()
+    mtx[:,:,2] = ch[2].copy()
+    return mtx
