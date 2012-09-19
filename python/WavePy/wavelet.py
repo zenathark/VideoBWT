@@ -22,6 +22,21 @@ def get_z_order(dim):
         mtx += [vector((y,x))]
     return mtx
 
+def fromarray(mtx, level, name = ""):
+    '''Creates a wavelet2D using a numpy array.
+
+    This method packs a data wavelet coefficients stored on a numpy ndarray
+    matrix into a wavelet2D object.
+
+    Args:
+        mtx: Coefficient matrix to be packed.
+        level: Level of decomposition of the wavelet
+        name: Wavelet used to get this coefficients (optional)
+
+    Returns:
+        A wavelet2D object packing the information given.
+    '''
+    return wavelet2D(mtx,level,name)
 
 class wavelet(object):
     def __init__(self):
@@ -34,17 +49,17 @@ class wavelet2D(object):
     
     level = 1
     w_type = float
+    name = ""
 
-
-    def __init__(self, data, level, w_type = float):
+    def __init__(self, data, level, name = ""):
         '''
         Constructor
         '''
         if not isinstance(data, np.ndarray) or data.ndim != 2:
             raise TypeError, "data must be a 2D numpy array matrix"
         self.level = level
-        self.w_type = w_type
         self.data = data
+        self.name = name
         
     def getHH(self):
         '''

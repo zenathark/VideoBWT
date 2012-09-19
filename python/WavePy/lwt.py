@@ -22,7 +22,7 @@ def cdf97(signal, level = 1,  in_place = True):
         sig_f16[:] = sig_i16
         signal = sig_f16
     signal = normal_forward(signal,level,1/1.149604398,(-1.586134342,-0.05298011854,0.8829110762,0.4435068522))
-    return wv.wavelet2D(signal,level)
+    return wv.wavelet2D(signal,level,"cdf97")
 
 def cdf53(signal, level = 1, in_place = True):
     if not isinstance(signal, np.ndarray) or signal.ndim != 2:
@@ -37,23 +37,23 @@ def cdf53(signal, level = 1, in_place = True):
         sig_f16[:] = sig_i16
         signal = sig_f16
     signal = normal_forward(signal,level,math.sqrt(2),(-0.5,0.25))
-    return wv.wavelet2D(signal,level)
+    return wv.wavelet2D(signal,level,"cdf53")
 
 def icdf97(wave, in_place = True):
     if not isinstance(wave, wv.wavelet2D):
         raise TypeError, "Signal expected as wavelet2D"
-    signal = wave.data
-    if not in_place:
-        signal = signal.copy()
+    signal = wave.data.copy()
+    signal.dtype = np.float32
+    signal[:] = wave.data
     signal = normal_inverse(signal,wave.level,1.149604398,(-0.4435068522,-0.8829110762,0.05298011854,1.586134342))
     return signal
 
 def icdf53(wave, in_place = True):
     if not isinstance(wave, wv.wavelet2D):
         raise TypeError, "Signal expected as wavelet2D"
-    signal = wave.data
-    if not in_place:
-        signal = signal.copy()
+    signal = wave.data.copy()
+    signal.dtype = np.float32
+    signal[:] = wave.data
     signal = normal_inverse(signal,wave.level,1/math.sqrt(2),(-0.25,0.5))
     return signal
 

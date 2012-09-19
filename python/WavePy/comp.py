@@ -8,118 +8,169 @@ import numpy as np
 from wavelet import *
 import itertools as it
 import math
+from lwt import *
+import dwt
+import cv
+import sys
 
 if __name__ == '__main__':
     pass
 
-def bitplane_encoding(wavelet, LSP, power, output):
-    for p in LSP:
-        output.append((wavelet.data[p[0]][p[1]] & 2 ** power) >> power)
-    return output
-
-def inv_bitplane_encoding(stream, LSP, wavelet, power):
-    for p in LSP:
-        bt = stream.pop()
-        wavelet.data[p[0]][p[1]] = wavelet.data[p[0]][p[1]] | bt << power
-        if not stream:
-            break
-    return wavelet
-
-def bitplane_encoding_n(wavelet, varsize):
-    output = []
-    LSP = list(it.product(range(len(wavelet.data)) , range(len(wavelet.data[0])) ))
-    for x in range(varsize):
-        output = bitplane_encoding(wavelet, LSP, x, output)
-    return output
-
-def inv_bitplane_encoding_n(stream,rows,cols,varsize):
-    wavelet = np.zeros((rows,cols),dtype = np.int16)
-    LSP = list(it.product(range(rows),range(cols)))
-    stream.reverse()
-    for i in range(varsize):
-        wavelet = inv_bitplane_encoding(stream, LSP, wavelet, i)
-    return wavelet
-
-#Get descendants, Pearlman named this set D
-def get_D(ij,wavelet):
-    D = []
-    O = get_O(ij,wavelet)
-    D += O
-    window_size = 4
-    while O:
-    #while np.all((4 * root) < max_root):
-        reverse_D = D[::-1]
-        for i in range(window_size):
-            O = get_O(reverse_D[i],wavelet)
-            D += O
-        window_size *= 4 #Window size increases as rows x 2 and cols x 2
-    return D
-
-#Get offsprings of ij, Pearlman named this set O
-def get_O(ij,wavelet):
-    O = []
-    if has_offspring(ij,wavelet):
-        O += [2*ij, 2*ij+(1,0), 2*ij+(0,1), 2*ij+(1,1)]
-    return O
-
-#Get all subsets of ij decendants O,D and L
-def get_DOL(ij,wavelet):
-    D = get_D(ij,wavelet)
-    O = D[:4]
-    L = D[4:]
-    return D, O, L
-
-def has_offspring(ij,wavelet, typ = bool):
-    if ij*2 < (len(wavelet.data),len(wavelet.data[0])):
-        if typ == bool:
-            return True
+def spiht_image_pack(img, wavename, level, bpp, mode = "bi.orth", delta = 0.01, display_progress = True, str_pr = ""):
+    if not isinstance(img,tuple):
+        img = (img)
+        bpp = (bpp)
+    ch_stream = {
+            "size": 0,
+            "channels":len(img),
+            "bpp":bpp,
+            "quant_delta":delta,
+            "wave_type": wavename,
+            "mode":mode,
+            "decomp_level":level,
+            "wise_bit":[],
+            "payload":[]
+            }
+    for i in range(len(img)):
+        m = np.asarray(img[i])
+        if mode == "bi.orth":
+            w = wavename(m,level,False)
         else:
-            return 1
-    else:
-        if typ == bool:
-            return False
-        else:
-            return 1
+            w = dwt.dwt2(m,wavename,level,mode)
+        stream = spiht_pack(w,bpp[i],delta,True,str_pr + "[channel "+str(i)+"]")
+        ch_stream["payload"] += stream["payload"]
+        ch_stream["wave_type"] = w.name
+        ch_stream["size"] += stream["size"]
+        ch_stream["wise_bit"] += [stream["wise_bit"]]
+        ch_stream["rows"] = stream["rows"]
+        ch_stream["cols"] = stream["cols"]
+    return ch_stream
 
-def fill_zerotree(root,wavelet,threshold):
-    l = [root]
-    c = 1
-    while True:
-        if has_offspring(l[-c]):
-            for i in range(c).reverse():
-                son = get_sons(l[i])
-                l += son[1]
-                l += son[2]
-                l += son[3]
-                l += son[4]
-            c *= 2
+def spiht_image_unpack(frame, display_progress = True, str_pr = ""):
+    rgb = ()
+    for i in range(frame["channels"]):
+        pack = {
+            "rows":frame["rows"],
+            "cols":frame["cols"],
+            "channels": 1,
+            "wave_type":frame["wave_type"],
+            "bpp":frame["bpp"],
+            "quant_delta":frame["quant_delta"],
+            "decomp_level":frame["decomp_level"],
+            "wise_bit":frame["wise_bit"][i],
+            "payload":frame["payload"][i]
+            }
+        wave = spiht_unpack(pack,True,str_pr + "[channel "+str(i)+"]")
+        if frame["wave_type"] == 'cdf97':
+            ch = icdf97(wave,False)
+        elif frame["wave_type"] == 'cdf53':
+            ch = icdf53(wave,False)
         else:
-            break
-    tree = tuple(root)
-    l.reverse()
-    for i in range(c):
-        p = l.pop()
-        tree[p] =  (((wavelet.data[p[0],p[1]] >> threshold) & 1) == 0)
-    if not not l:
-        for c in l:
-            son = get_offspring(c)
-            tree[c] = ((((wavelet.data[c[0],c[1]] >> threshold) & 1) == 0) & tree[son[1]] & tree[son[2]] & tree[son[3]] & tree[son[4]])
-    return tree
+            ch = dwt.dwt2(wave,frame["wave_type"],frame["decomp_level"],frame["mode"])
+        ch = ch - ch.min()
+        ch = ch / ch.max() * 255
+        ch_i = np.zeros((len(ch),len(ch[0])),np.uint8)
+        ch_i[:] = ch
+        rgb += tuple([ch_i])
+    return rgb
 
-def is_zerotree(tree,ij):
-    return tree[ij[0:2]] 
- 
+def spiht_pack(wave,bpp,delta = 0.01, display_progress=True, str_pr = ""):
+    """Compresses a wavelet with SPIHT.
+
+    Runs the original SPIHT algorithm from Dr. Pearlsman paper over the 
+    given wavelet.
+
+    Args:
+        wavelet: A wavelet to be compressed, must be wavelet2D data type
+        bpp: Bits per pixel compression ratio
+        delta: Quantization delta if wavelet data is on floating point. 
+            This leads to lossy compression always if coefficients are not 
+            int
+        display_progress: True if you want to print on screen algorithm 
+                    progress
+
+    Returns:
+        A dictionary with a structure with the compressed data and some 
+            decoding info. For example:
+        {
+            "size":0,
+            "wave_type":"db7",
+            "bpp":0.5,
+            "quant_delta":0.001,
+            "payload":[]
+        }
+    """ 
+    codec = SPIHT()
+    codec.wavelet = wave
+    codec.bpp = bpp
+    codec.delta = delta
+    codec.check_floating_point()
+    codec.str_pr = str_pr
+    codec.compress()
+    stream = codec.output_stream.to_list()
+    pack = {
+            "size":len(stream),
+            "rows":len(wave.data),
+            "cols":len(wave.data[0]),
+            "channels": 1,
+            "wave_type":wave.name,
+            "bpp":(bpp),
+            "quant_delta":delta,
+            "decomp_level":wave.level,
+            "wise_bit":codec.n,
+            "payload":[stream]
+            }
+    return pack
+
+def spiht_unpack(frame, display_progress=True, str_pr = ""):
+    """De-compresses a wavelet with SPIHT.
+
+    Runs the original SPIHT algorithm from Dr. Pearlsman paper over the 
+    given wavelet.
+
+    Args:
+        frame: A previously compressed frame
+        display_progress: True if you want to print on screen algorithm 
+                    progress
+
+    Returns:
+        An uncompressed wavelet2D instance 
+    """ 
+    codec = SPIHT()
+    data = np.zeros((frame["rows"],frame["cols"]),np.int)
+    codec.wavelet = wavelet2D(data,frame["decomp_level"],frame["wave_type"])
+    codec.bpp = frame["bpp"][0]
+    codec.delta = frame["quant_delta"]
+    codec.str_pr = str_pr
+    codec.n = frame["wise_bit"]
+    codec.output_stream = buffer(frame["payload"],len(frame["payload"]))
+    codec.uncompress()
+    return codec.wavelet
+
 class SPIHT(object):
     '''
+    This class represents a SPIHT codec. It can compress and decompress
+    data from Wavelet2D data type.
+
+    This class is based on the original paper of Dr. Pearlsman
     '''
 
+    #bpp resolution for compression
     bpp = 0
-    def __init__(self, wavelet, delta = 0.001):
+    #inner wavelet data type structure
+    wavelet = 0
+    #Quantization delta for floating point wavelets
+    delta = 0.01
+    #Estra info for progress display
+    str_pr = ""
+
+    def __init__(self):
+        pass
+
+    def check_floating_point(self):
         ints = [np.int, np.int16, np.int32, np.int64]
-        if wavelet.data.dtype in ints:
-            self.wavelet = wavelet
-        else:
-            self.wavelet = quant(wavelet,delta)
+        if not self.wavelet.data.dtype in ints:
+            self.wavelet = quant(self.wavelet,self.delta)
 
     def init(self):
         self.LSP = []
@@ -135,6 +186,57 @@ class SPIHT(object):
         T = np.array([i.tolist() for i in Tau])
         return (abs(self.wavelet.data[T[:,0],T[:,1]]).max() >> int(n)) & 1
 
+    def bitplane_encoding(self, power, output):
+        for p in self.LSP:
+            output.append((self.wavelet.data[p[0]][p[1]] & 2 ** power) >> power)
+
+    def inv_bitplane_encoding(self, power):
+        for p in self.LSP:
+            bt = self.output_stream.pop()
+            self.wavelet.data[p[0],p[1]] = self.wavelet.data[p[0],p[1]] | bt << power
+            if not stream:
+                break
+
+#Get descendants, Pearlman named this set D
+    def get_D(self, ij):
+        D = []
+        O = get_O(ij)
+        D += O
+        window_size = 4
+        while O:
+        #while np.all((4 * root) < max_root):
+            reverse_D = D[::-1]
+            for i in range(window_size):
+                O = get_O(reverse_D[i])
+                D += O
+            window_size *= 4 #Window size increases as rows x 2 and cols x 2
+        return D
+
+#Get offsprings of ij, Pearlman named this set O
+    def get_O(self, ij):
+        O = []
+        if has_offspring(ij):
+            O += [2*ij, 2*ij+(1,0), 2*ij+(0,1), 2*ij+(1,1)]
+        return O
+
+#Get all subsets of ij decendants O,D and L
+    def get_DOL(self, ij):
+        D = get_D(self, ij)
+        O = D[:4]
+        L = D[4:]
+        return D, O, L
+
+    def has_offspring(self, ij, typ = bool):
+        if ij*2 < (len(self.wavelet.data),len(self.wavelet.data[0])):
+            if typ == bool:
+                return True
+            else:
+                return 1
+        else:
+            if typ == bool:
+                return False
+            else:
+                return 1
 #outputs coefficient sign
     def out_sign(self, coeff):
         if self.wavelet.data[coeff[0],coeff[1]] > 0:
@@ -162,7 +264,7 @@ class SPIHT(object):
         remove_from_LIS = []
         for ij in self.LIS:
         #Check for zerotree roots (2.2.1)
-            D, O, L = get_DOL(ij,self.wavelet)
+            D, O, L = get_DOL(ij)
             if ij.entry_type == 'A':
                 out = self.S_n(D,n)
                 self.output_stream += [out]
@@ -201,7 +303,7 @@ class SPIHT(object):
         n = self.n
         self.init()
         bit_bucket = self.bpp * len(self.wavelet.data) * len(self.wavelet.data[0])
-        self.output_stream=buffer([],bit_bucket)
+        self.output_stream=buffer([],bit_bucket,True,self.str_pr)
         #self.output_stream = []
         while n >= 0:
             try:
@@ -277,14 +379,18 @@ class SPIHT(object):
                     
 class buffer(list):
     size = 1024
-    
-    def __init__(self, arg = [], size = 1024):
+    str_pr = ""
+
+    def __init__(self, arg = [], size = 1024, show_progress = True, str_pr = ""):
         super(buffer, self).__init__(arg)
         self.size = size
+        self.str_pr = str_pr
+        self.show_progress = show_progress
 
     def __iadd__(self, other):
         if len(self) <= self.size:
-            print( float(len(self)) / self.size)
+            if self.show_progress:
+                print ('progress: {0:.2f}'+self.str_pr).format(float(len(self)) / self.size * 100)
             return buffer(self + other,self.size)
         else:
             raise NameError("Stream full")
@@ -294,6 +400,14 @@ class buffer(list):
             super(buffer,self).append(other)
         else:
             raise NameError("Stream full")
+
+    def to_list(self):
+        return list(self)
+
+    def pop(self):
+        if self.show_progress:
+            print ('progress: {0:.2f}' + self.str_pr).format(float(len(self))/self.size * 100)
+        return super(buffer,self).pop()
 
 def quant(wavelet,delta):
     iw = np.zeros((len(wavelet.data),len(wavelet.data[0])),np.int)
