@@ -12,6 +12,7 @@ from lwt import *
 import dwt
 import cv
 import sys
+import pickle
 
 if __name__ == '__main__':
     pass
@@ -37,7 +38,7 @@ def spiht_image_pack(img, wavename, level, bpp, mode = "bi.orth", delta = 0.01, 
             w = wavename(m,level,False)
         else:
             w = dwt.dwt2(m,wavename,level,mode)
-        stream = spiht_pack(w,bpp[i],delta,True,str_pr + "[channel "+str(i)+"]")
+        stream = spiht_pack(w,bpp[i],delta,display_progress,str_pr + "[channel "+str(i)+"]")
         ch_stream["payload"] += stream["payload"]
         ch_stream["wave_type"] = w.name
         ch_stream["size"] += stream["size"]
@@ -74,7 +75,7 @@ def spiht_image_unpack(frame, display_progress = True, str_pr = ""):
         rgb += tuple([ch_i])
     return rgb
 
-def spiht_pack(wave,bpp,delta = 0.01, display_progress=True, str_pr = ""):
+def spiht_pack(wave,bpp,delta = 0.01, display_progress=True, str_pr = "", d, handle):
     """Compresses a wavelet with SPIHT.
 
     Runs the original SPIHT algorithm from Dr. Pearlsman paper over the 
@@ -99,14 +100,27 @@ def spiht_pack(wave,bpp,delta = 0.01, display_progress=True, str_pr = ""):
             "quant_delta":0.001,
             "payload":[]
         }
-    """ 
+    """
+    filename = str(len(wave.data)) + "x" + str(len(wave.data[0])) + ".dol"
+    if not d:
+        try:
+            f = open(filename,"r")
+            d = pickle.load(f)
+            f.close()
+            handle = True
+        except IOError as e:
+            d = {}
+            handle = True
+    update = len(d)
     codec = SPIHT()
     codec.wavelet = wave
     codec.bpp = bpp
     codec.delta = delta
     codec.check_floating_point()
     codec.str_pr = str_pr
+    codec.display_progress = display_progress
     codec.compress()
+    codec.d_memory = d
     stream = codec.output_stream.to_list()
     pack = {
             "size":len(stream),
@@ -120,9 +134,13 @@ def spiht_pack(wave,bpp,delta = 0.01, display_progress=True, str_pr = ""):
             "wise_bit":codec.n,
             "payload":[stream]
             }
+    if len(d) > update and handle:
+        f = open(filename,"w+")
+        pickle.dump(codec.d_memory,f)
+        f.close()
     return pack
 
-def spiht_unpack(frame, display_progress=True, str_pr = ""):
+def spiht_unpack(frame, display_progress=True, str_pr = "",d,handle):
     """De-compresses a wavelet with SPIHT.
 
     Runs the original SPIHT algorithm from Dr. Pearlsman paper over the 
@@ -136,6 +154,15 @@ def spiht_unpack(frame, display_progress=True, str_pr = ""):
     Returns:
         An uncompressed wavelet2D instance 
     """ 
+    if not d:
+        try:
+            f = open(filename,"r")
+            d = pickle.load(f)
+            f.close()
+            handle = True
+        except IOError as e:
+            d = {}
+            handle = True
     codec = SPIHT()
     data = np.zeros((frame["rows"],frame["cols"]),np.int)
     codec.wavelet = wavelet2D(data,frame["decomp_level"],frame["wave_type"])
@@ -143,8 +170,15 @@ def spiht_unpack(frame, display_progress=True, str_pr = ""):
     codec.delta = frame["quant_delta"]
     codec.str_pr = str_pr
     codec.n = frame["wise_bit"]
-    codec.output_stream = buffer(frame["payload"],len(frame["payload"]))
-    codec.uncompress()
+    codec.d_memory = d
+    codec.output_stream = stream_buffer(frame["payload"],len(frame["payload"]))
+    if len(d) > update and handle:
+        f = open(filename,"w+")
+        pickle.dump(codec.d_memory,f)
+        f.close()
+    return pack
+
+   codec.uncompress()
     return codec.wavelet
 
 class SPIHT(object):
@@ -163,6 +197,8 @@ class SPIHT(object):
     delta = 0.01
     #Estra info for progress display
     str_pr = ""
+    display_progress = True
+    d_memory = {}
 
     def __init__(self):
         pass
@@ -198,30 +234,49 @@ class SPIHT(object):
                 break
 
 #Get descendants, Pearlman named this set D
+    """   
     def get_D(self, ij):
-        D = []
-        O = get_O(ij)
+        if self.d_memory.has_key(ij):
+            return self.d_memory[ij]
+        O = self.get_O(ij)
+        D = np.zeros(2**((self.wavelet.level-1)*2))
         D += O
         window_size = 4
         while O:
         #while np.all((4 * root) < max_root):
             reverse_D = D[::-1]
             for i in range(window_size):
-                O = get_O(reverse_D[i])
+                O = self.get_O(reverse_D[i])
                 D += O
             window_size *= 4 #Window size increases as rows x 2 and cols x 2
-        return D
+        return D"""
 
+    def get_D(self, ij):
+        try:
+            return self.d_memory[ij.__hash__()]
+        except KeyError:
+            Di = []
+            O = self.get_O(ij)
+            Di += O
+            window_size = 4
+            while O:
+                reverse_D = Di[::-1]
+                for i in range(window_size):
+                    O = self.get_O(reverse_D[i])
+                    Di += O
+                window_size *= 4 #Window size increases as rows x 2 and cols x 2
+            self.d_memory[ij.__hash__()] = Di
+            return Di
 #Get offsprings of ij, Pearlman named this set O
     def get_O(self, ij):
-        O = []
-        if has_offspring(ij):
-            O += [2*ij, 2*ij+(1,0), 2*ij+(0,1), 2*ij+(1,1)]
-        return O
+        if self.has_offspring(ij):
+            return [2*ij, 2*ij+(1,0), 2*ij+(0,1), 2*ij+(1,1)]
+        else:
+            return []
 
 #Get all subsets of ij decendants O,D and L
     def get_DOL(self, ij):
-        D = get_D(self, ij)
+        D = self.get_D(ij)
         O = D[:4]
         L = D[4:]
         return D, O, L
@@ -264,7 +319,7 @@ class SPIHT(object):
         remove_from_LIS = []
         for ij in self.LIS:
         #Check for zerotree roots (2.2.1)
-            D, O, L = get_DOL(ij)
+            D, O, L = self.get_DOL(ij)
             if ij.entry_type == 'A':
                 out = self.S_n(D,n)
                 self.output_stream += [out]
@@ -303,15 +358,16 @@ class SPIHT(object):
         n = self.n
         self.init()
         bit_bucket = self.bpp * len(self.wavelet.data) * len(self.wavelet.data[0])
-        self.output_stream=buffer([],bit_bucket,True,self.str_pr)
+        self.output_stream=stream_buffer([],bit_bucket,self.display_progress,self.str_pr)
         #self.output_stream = []
         while n >= 0:
             try:
                 newLSP = self.sorting(n)
-                bitplane_encoding(self.wavelet,self.LSP,n,self.output_stream)
+                self.bitplane_encoding(n,self.output_stream)
                 self.LSP += newLSP
                 n -= 1
-            except NameError:
+            except NameError as e:
+                print e
                 return
 
     def inv_sorting(self,n):
@@ -331,7 +387,7 @@ class SPIHT(object):
             self.LIP.remove(i)
         remove_from_LIS = []
         for ij in self.LIS:
-            D, O, L = get_DOL(ij,self.wavelet)
+            D, O, L = self.get_DOL(ij,self.wavelet)
             if ij.entry_type == "A":
                 out = self.output_stream.pop()
                 if out == 1:
@@ -371,12 +427,59 @@ class SPIHT(object):
         while n >= 0:
             try:
                 newLSP = self.inv_sorting(n)
-                inv_bitplane_encoding(self.output_stream,self.LSP,self.wavelet, n)
+                self.inv_bitplane_encoding(n)
                 self.LSP += newLSP
                 n -= 1
             except IndexError:
                 break
                     
+
+class stream_buffer(object):
+    size = 1024
+    str_ptr = ""
+    rev = 1
+    
+    def __init__(self, arg = [], size = 1024, show_progress = True, str_pr = ""):
+        self.size = int(size)
+        self.str_pr = str_pr
+        if not arg:
+            self.data = np.zeros(size)
+            self.pointer = 0
+        else:
+            self.data = np.array(arg)
+            self.pointer = len(arg)
+        self.show_progress = show_progress
+
+    def __iadd__(self, other):
+        if self.pointer < self.size:
+#            if self.show_progress:
+#                print ('progress: {0:.4f}'+self.str_pr).format(float(self.pointer) / self.size * 100)
+            self.data[self.pointer] = other[0]
+            self.pointer += self.rev*1
+            return self 
+        else:
+            raise NameError("Stream full")
+
+    def append(self,other):
+        if self.pointer < self.size:
+            self += [other]
+            return self
+        else:
+            raise NameError("Stream full")
+
+    def to_list(self):
+        return list(self.data)
+
+    def pop(self):
+        if self.show_progress:
+            print ('progress: {0:.4f}' + self.str_pr).format(float(self.pointer)/self.size * 100)
+            pointer -= self.rev*1
+        return self.data[pointer + 1]
+   
+    def reverse(self):
+        rev = rev*-1
+
+
 class buffer(list):
     size = 1024
     str_pr = ""

@@ -197,6 +197,11 @@ class vector(object):
             return vector(self.data + other.data)
         else:
             return vector(self.data + np.array(other))
+    def __eq__(self, other):
+        if self.__hash__() = other.__hash__()
+            return True
+        else:
+            return False
 
     def __str__(self):
         return self.data.__str__()
