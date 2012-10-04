@@ -15,10 +15,10 @@ def cdf97(signal, level = 1,  in_place = True):
     if not in_place:
         signal = signal.copy()
     if signal.dtype == np.uint8:
-        sig_i8 = np.zeros((len(signal),2*len(signal[0])),np.uint8)
-        sig_i8[:,0:-1:2] = signal
-        sig_i16 = sig_i8.view(np.uint16)
-        sig_f16 = sig_i16.view(np.float16)
+        sig_i8 = np.zeros((len(signal),4*len(signal[0])),np.uint8)
+        sig_i8[:,0:-1:4] = signal
+        sig_i16 = sig_i8.view(np.uint32)
+        sig_f16 = sig_i16.view(np.float32)
         sig_f16[:] = sig_i16
         signal = sig_f16
     signal = normal_forward(signal,level,1/1.149604398,(-1.586134342,-0.05298011854,0.8829110762,0.4435068522))

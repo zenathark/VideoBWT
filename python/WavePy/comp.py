@@ -358,14 +358,14 @@ def fvht_unpack(frame, display_progress=True, str_pr = "",d = {}, handle = True)
             handle = True
     update = len(d)
     codec = FVHT()
-    data = np.zeros((frame["rows"],frame["cols"]),np.int)
+    data = np.zeros((frame["rows"],frame["cols"]),np.uint)
     codec.wavelet = wavelet2D(data,frame["decomp_level"],frame["wave_type"])
-    codec.bpp = frame["bpp"]
+    codec.bpp = frame["Lbpp"]
     codec.delta = frame["quant_delta"]
     codec.str_pr = str_pr
     codec.n = frame["wise_bit"]
     codec.d_memory = d
-    codec.output_stream = stream_buffer(frame["payload"],len(frame["payload"]))
+    codec.output_stream = stream_buffer(frame["payload"][0],len(frame["payload"][0]))
     codec.Lbpp = frame["Lbpp"]
     codec.lbpp = frame["lbpp"]
     codec.alpha = frame["alpha"]
@@ -696,26 +696,24 @@ class FVHT(object):
     def bitplane_encoding(self, power, output):
         removeLSP = []
         for p in self.LSP:
-            if self.calculate_fovea_w(p) > self.get_current_bpp():
-                    removeLSP += [ij]
+            if self.calculate_fovea_w(p) < self.get_current_bpp():
+                pass
             else:
                 output.append((self.wavelet.data[p[0]][p[1]] & 2 ** power) >> power)
-                self.amount_of_bits[p] += 1
-        for i in removeLSP:
-            self.LSP.remove(i)
+                self.amount_of_bits[tuple(p)] += 1
 
     def inv_bitplane_encoding(self, power):
         removeLSP = []
         for p in self.LSP:
-            if self.calculate_fovea_w(p) > self.get_current_bpp():
+            if self.calculate_fovea_w(p) < self.get_current_bpp():
                 removeLSP += [ij]
             else:
                 bt = self.output_stream.pop()
                 self.wavelet.data[p[0],p[1]] = self.wavelet.data[p[0],p[1]] | bt << power
             if self.output_stream.pointer == self.output_stream.size:
                 break
-        for i in removeLSP:
-            self.LSP.remove(i)
+        #for i in removeLSP:
+        #    self.LSP.remove(i)
 
     #Get descendants, Pearlman named this set D
     def get_D(self, ij):
@@ -773,11 +771,11 @@ class FVHT(object):
             out = self.S_n([ij], n)
             self.output_stream += [out]
             if out == 1:
-                if self.calculate_fovea_w(ij) > self.get_current_bpp():
+                if self.calculate_fovea_w(ij) <= self.get_current_bpp():
                     removeLIP += [ij]
                 else:
                     nextLSP += [ij]
-                    self.amount_of_bits[ij] = 1
+                    self.amount_of_bits[tuple(ij)] = 1
                     self.output_stream += [self.out_sign(ij)]
                     removeLIP += [ij]
         #Remove new Significant pixels from LIP list
@@ -796,10 +794,10 @@ class FVHT(object):
                         out = self.S_n([kl],n)
                         self.output_stream += [out]
                         if out == 1:
-                            if self.calculate_fovea_w(ij) <= self.get_current_bpp():
+                            if self.calculate_fovea_w(kl) >= self.get_current_bpp():
                                 nextLSP += [kl]
                                 self.output_stream += [self.out_sign(kl)]
-                                self.amount_of_bits[ij] = 1
+                                self.amount_of_bits[tuple(ij)] = 1
                         else:
                             self.LIP += [kl]
                 #Check if ij has grandsons, if not remove from LIS
@@ -827,7 +825,7 @@ class FVHT(object):
         self.n = int(math.log(maxs.max(),2))
         n = self.n
         self.init()
-        bit_bucket = self.bpp * len(self.wavelet.data) * len(self.wavelet.data[0])
+        bit_bucket = self.bpp * self.wavelet.cols * self.wavelet.rows
         self.output_stream=stream_buffer([],bit_bucket,self.display_progress,self.str_pr)
         self.calculate_fovea_length()
         self.amount_of_bits = np.zeros((len(self.wavelet.data), len(self.wavelet.data[0])))
@@ -838,8 +836,7 @@ class FVHT(object):
                 self.bitplane_encoding(n,self.output_stream)
                 self.LSP += newLSP
                 n -= 1
-            except NameError as e:
-                print e
+            except BufferFullException as e:
                 return
 
     def inv_sorting(self,n):
@@ -849,7 +846,7 @@ class FVHT(object):
         for ij in self.LIP:
             out = self.output_stream.pop()
             if out == 1:
-                if self.calculate_fovea_w(ij) > self.get_current_bpp():
+                if self.calculate_fovea_w(ij) <= self.get_current_bpp():
                     removeLIP += [ij]
                     continue
                 else:
@@ -870,9 +867,7 @@ class FVHT(object):
                     for kl in O:
                         out = self.output_stream.pop()
                         if out == 1:
-                            if self.calculate_fovea_w(ij) > self.get_current_bpp():
-                                removeLIP += [ij]
-                            else:
+                            if self.calculate_fovea_w(kl) >= self.get_current_bpp():
                                 nextLSP += [kl]
                                 sign = self.output_stream.pop()
                                 self.wavelet.data[kl[0],kl[1]] |= (1 << n)
@@ -915,7 +910,7 @@ class FVHT(object):
  
     def get_current_bpp(self):
         bpp = float(self.output_stream.pointer)
-        bpp /= (len(self.wavelet.data) * len(self.wavelet.data[0]))
+        bpp /= self.output_stream.size
         return bpp
     
     def calculate_fovea_w(self, ij):
@@ -925,28 +920,49 @@ class FVHT(object):
             return self.Lbpp
         H = len(self.wavelet.data)
         W = len(self.wavelet.data[0])
-        d = 2 * self.norm(abs(P[1]*(H/W)-ij[1]),abs(P[0] - ij[0])) / H
+        d = self.norm(P[1] - ij[1],P[0] - ij[0]) * 2**P[2] / self.fovea_length
         if d<self.alpha:
             return self.Lbpp
         elif d>=1:
-            return self.Lbpp
+            return self.lbpp
         else:
-            return self.powerlaw((d-self.alpha)/(1 - self.alpha))
+            return self.powerlaw(d) * (self.Lbpp - self.lbpp) + self.lbpp
     
     def norm(self,x,y):
         return math.sqrt(float(x**2 + y ** 2))
     
     def powerlaw(self,n):
-        return self.c * (1 - ((-n-self.alpha) / (1-self.alpha))) ** self.gamma
+        return self.c * (1 - ((n-self.alpha) / (1-self.alpha))) ** self.gamma
         
     def get_center(self,ij):
-        if (ij[0] == 0 & ij[1] == 0):
+        if (ij[0] == 0 and ij[1] == 0):
             raise NameError("ij on HH")
         else:
-            aprx_level = math.trunc(math.log(len(self.wavelet.data)/ij[0],2)) + 1
-            if aprx_level > self.wavelet.level:
+            if ij[0] == 0:
+                aprx_level_r = self.wavelet.level + 1
+            else:
+                aprx_level_r = math.ceil(math.log(self.wavelet.rows/float(ij[0]),2))
+                if aprx_level_r > self.wavelet.level:
+                    aprx_level_r = self.wavelet.level + 1
+            if ij[1] == 0:
+                aprx_level_c = self.wavelet.level + 1
+            else:
+                aprx_level_c = math.ceil(math.log(self.wavelet.rows/float(ij[1]),2))
+                if aprx_level_c > self.wavelet.level:
+                    aprx_level_c = self.wavelet.level + 1
+            if (aprx_level_r > self.wavelet.level) and (aprx_level_c > self.wavelet.level):
                 raise NameError("ij on HH")
-            return (self.P[0] / 2**aprx_level, self.P[1] / 2**aprx_level)
+            if aprx_level_r <= aprx_level_c:
+                aprx_level = aprx_level_r
+            else:
+                aprx_level = aprx_level_c
+            y = float(self.P[0]) / 2**aprx_level
+            x = float(self.P[1]) / 2**aprx_level 
+            if aprx_level_r == aprx_level:
+                y += float(self.wavelet.rows) / 2**aprx_level
+            if aprx_level_c == aprx_level:
+                x += float(self.wavelet.cols) / 2**aprx_level
+            return (y, x, aprx_level)
     
     def calculate_fovea_length(self):
         H = len(self.wavelet.data)
@@ -957,6 +973,13 @@ class FVHT(object):
         k[2] = self.norm(W-self.P[0],H-self.P[1])
         k[3] = self.norm(self.P[0],H-self.P[1])
         self.fovea_length = k.max()
+        
+    def printFoveaWindow(self):
+        window = np.zeros((self.wavelet.rows, self.wavelet.cols))
+        points = get_z_order(self.wavelet.rows * self.wavelet.cols)
+        for i in points:
+            window[tuple(i)] = self.calculate_fovea_w(i)
+        return window
                 
 class stream_buffer(object):
     size = 1024
@@ -982,14 +1005,14 @@ class stream_buffer(object):
             self.pointer += self.rev*1
             return self 
         else:
-            raise NameError("Stream full")
+            raise BufferFullException("Stream full")
 
     def append(self,other):
         if self.pointer < self.size:
             self += [other]
             return self
         else:
-            raise NameError("Stream full")
+            raise BufferFullException("Stream full")
 
     def to_list(self):
         return list(self.data)
@@ -1041,3 +1064,10 @@ def quant(wavelet,delta):
     iw= np.array(np.trunc(wavelet.data / delta), np.int)
     wavelet.data = iw
     return wavelet
+
+class BufferFullException(Exception):
+    def __init__(self, value):
+        self.value = value
+    
+    def __str__(self):
+        return repr(self.value)

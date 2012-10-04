@@ -8,6 +8,7 @@ from numpy import array
 import math
 import cv
 import threading
+from collections import deque
 
 def get_z_order(dim):
     mtx = []
@@ -20,6 +21,29 @@ def get_z_order(dim):
             x |= ((i >> 2*j) & 1) << j 
             y |= ((i >> 2*j+1) & 1) << j 
         mtx += [vector((y,x))]
+    return mtx
+
+def get_morton_order(dim, idx = 0, size = -1):
+    if size < 0:
+        mtx = deque()
+    else:
+        mtx = deque([],size)
+    if idx <> 0:
+        swp = idx
+        idx = dim
+        dim = swp
+    n = int(math.log(dim,2))
+    pows = range(int(n/2))
+    for i in range(dim):
+        x = 0
+        y = 0
+        for j in pows:
+            x |= ((i >> 2*j) & 1) << j 
+            y |= ((i >> 2*j+1) & 1) << j
+        if idx == 0: 
+            mtx += [vector((y,x))]
+        else:
+            idx -= 1
     return mtx
 
 def fromarray(mtx, level, name = ""):
@@ -50,6 +74,8 @@ class wavelet2D(object):
     level = 1
     w_type = float
     name = ""
+    rows = 0
+    cols = 0
 
     def __init__(self, data, level, name = ""):
         '''
@@ -60,6 +86,8 @@ class wavelet2D(object):
         self.level = level
         self.data = data
         self.name = name
+        self.rows = len(data)
+        self.cols = len(data[0])
         
     def getHH(self):
         '''
@@ -159,10 +187,13 @@ class wavelet2D(object):
         w = w_ui8_d
         self.data = temp
         #show with a thread
-        wm = WindowManager(1)
-        wm.img = cv.fromarray(w.copy())
-        wm.name = name
-        wm.start()
+        #wm = WindowManager(1)
+#        wm.img = cv.fromarray(w.copy())
+#        wm.name = name
+#        wm.start()
+        cv.ShowImage(name,cv.fromarray(w.copy()))
+        cv.WaitKey(0)
+        cv.DestroyWindow(name)
 
 class WindowManager(threading.Thread):
 
@@ -188,6 +219,7 @@ class vector(object):
         else:
             self.data = np.array(data)
         self.entry_type = type
+        self.deleted = False
 
     def __hash__(self):
         return hash(tuple(self.data))
@@ -237,7 +269,6 @@ def splitRGB(image):
     g = k[:,:,1].copy()
     b = k[:,:,2].copy()
     return (r,g,b)
-
 
 def fuseRGB(ch):
     mtx = np.zeros((len(ch[0]),len(ch[0][0]),3))
