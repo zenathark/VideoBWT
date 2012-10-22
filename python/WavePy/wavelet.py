@@ -154,6 +154,7 @@ class wavelet2D(object):
         temp = self.data
         #temporal wavelet copy
         w = self.data.copy()
+        w = np.abs(w)
         rows = len(w)
         cols = len(w[0])
         #scaling coefficients for display
@@ -191,9 +192,12 @@ class wavelet2D(object):
 #        wm.img = cv.fromarray(w.copy())
 #        wm.name = name
 #        wm.start()
-        cv.ShowImage(name,cv.fromarray(w.copy()))
-        cv.WaitKey(0)
-        cv.DestroyWindow(name)
+        #cv.ShowImage(name,cv.fromarray(w.copy()))
+        #cv.WaitKey(0)
+        #cv.DestroyWindow(name)
+        import pylab
+        pylab.imshow(w)
+        return w
 
 class WindowManager(threading.Thread):
 

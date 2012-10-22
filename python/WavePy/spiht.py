@@ -101,7 +101,7 @@ def spiht_pack(wave,bpp,delta = 0.01, display_progress=True, str_pr = "", d = {}
             "payload":[]
         }
     """
-    filename = str(len(wave.data)) + "x" + str(len(wave.data[0])) + ".dol"
+    filename = str(len(wave.data)) + "x" + str(len(wave.data[0])) + "_" + str(wave.level) +".dol"
     if not d:
         try:
             f = open(filename,"r")
@@ -155,7 +155,7 @@ def spiht_unpack(frame, display_progress=True, str_pr = "",d = {}, handle = True
     Returns:
         An uncompressed wavelet2D instance 
     """
-    filename = str(frame["rows"]) + "x" + str(frame["cols"]) + ".dol" 
+    filename = str(frame["rows"]) + "x" + str(frame["cols"]) + "_" + str(frame["decomp_level"]) +".dol" 
     if not d:
         try:
             f = open(filename,"r")
@@ -526,7 +526,7 @@ def fvht_pack(wave, f_center, Lbpp, lbpp, alpha, c, gamma, delta = 0.01, display
             "payload":[]
         }
     """
-    filename = str(len(wave.data)) + "x" + str(len(wave.data[0])) + ".dol"
+    filename = str(len(wave.data)) + "x" + str(len(wave.data[0])) + "_" + str(wave.level) +".dol"
     if not d:
         try:
             f = open(filename,"r")
@@ -592,7 +592,7 @@ def fvht_unpack(frame, display_progress=True, str_pr = "",d = {}, handle = True)
     Returns:
         An uncompressed wavelet2D instance 
     """
-    filename = str(frame["rows"]) + "x" + str(frame["cols"]) + ".dol" 
+    filename = str(frame["rows"]) + "x" + str(frame["cols"]) + "_" + str(frame["decomp_level"]) +".dol" 
     if not d:
         try:
             f = open(filename,"r")
@@ -754,6 +754,7 @@ class FVHT(SPIHT):
         self.amount_of_bits = np.zeros((len(self.wavelet.data), len(self.wavelet.data[0])))
         self.check = deque()
         test = deque()
+        k = self.printFoveaWindow()
         while n >= 0 and len(self.output_stream) < bit_bucket:
             print "Sorting...{0}".format(len(self.output_stream)/float(bit_bucket))
             newLSP = self.sorting(n)
@@ -880,7 +881,10 @@ class FVHT(SPIHT):
             return self.powerlaw(d) * (self.Lbpp - self.lbpp) + self.lbpp
     
     def norm(self,x,y):
-        return math.sqrt(float(x**2 + y ** 2))
+        mx = abs(x)
+        if mx<abs(y):
+            mx = abs(y)
+        return mx#math.sqrt(float(x**2 + y ** 2))
     
     def powerlaw(self,n):
         return self.c * (1 - ((n-self.alpha) / (1-self.alpha))) ** self.gamma
