@@ -7,6 +7,8 @@ Created on Sep 28, 2012
 from collections import deque
 import numpy as np
 import wavelet as wv
+import scipy.weave as weave
+from scipy.weave import converters
 import pickle
 import lwt
 import dwt
@@ -101,17 +103,17 @@ def spiht_pack(wave,bpp,delta = 0.01, display_progress=True, str_pr = "", d = {}
             "payload":[]
         }
     """
-    filename = str(len(wave.data)) + "x" + str(len(wave.data[0])) + "_" + str(wave.level) +".dol"
-    if not d:
-        try:
-            f = open(filename,"r")
-            d = pickle.load(f)
-            f.close()
-            handle = True
-        except IOError as e:
-            d = {}
-            handle = True
-    update = len(d)
+    #filename = str(len(wave.data)) + "x" + str(len(wave.data[0])) + "_" + str(wave.level) +".dol"
+    #if not d:
+    #    try:
+    #        f = open(filename,"r")
+    #        d = pickle.load(f)
+    #        f.close()
+    #        handle = True
+    #    except IOError as e:
+    #        d = {}
+    #        handle = True
+    #update = len(d)
     codec = SPIHT()
     codec.wavelet = wave
     codec.bpp = bpp
@@ -135,10 +137,10 @@ def spiht_pack(wave,bpp,delta = 0.01, display_progress=True, str_pr = "", d = {}
             "payload":[stream],
             "test_data":codec.test_data
             }
-    if len(codec.d_memory) > update and handle:
-        f = open(filename,"w+")
-        pickle.dump(codec.d_memory,f)
-        f.close()
+    #if len(codec.d_memory) > update and handle:
+    #    f = open(filename,"w+")
+    #    pickle.dump(codec.d_memory,f)
+    #    f.close()
     return pack
 
 def spiht_unpack(frame, display_progress=True, str_pr = "",d = {}, handle = True):
@@ -197,6 +199,9 @@ class SPIHT(object):
     delta = 0.01
     #outputdata
     output_stream = 0
+    
+    zero_tree_data = 0
+
     #Extra info for progress display
     str_pr = ""
     display_progress = True
@@ -214,7 +219,7 @@ class SPIHT(object):
         self.LIS = wv.get_morton_order(rows*cols/4,rows*cols)
         for i in self.LIS:
             i.entry_type = "A"
-        self.test_data = wv.wavelet2D(np.zeros((512,512),np.int32),4)
+        self.test_data = wv.wavelet2D(np.zeros((512,512)),self.wavelet.level)
         return
     
     def check_floating_point(self):
@@ -224,17 +229,25 @@ class SPIHT(object):
 
     def S_n(self, Tau, n):
         T = np.array([i.tolist() for i in Tau])
-        return (abs(self.wavelet.data[T[:,0],T[:,1]]).max() >> int(n)) & 1
+        return int((abs(self.zero_tree_data[T[:,0],T[:,1]]).max() >= n))
 
     def bitplane_encoding(self, power, output):
 #        if self.LSP:
 #            T = np.array([i.tolist() for i in self.LSP])
 #            stream = self.wavelet.data[T[:,0], T[:,1]] & 2 ** power >> power
 #            self.output_stream.extend(list(stream))
+        data = self.wavelet.data
+        accum = self.test_data.data
         for p in self.LSP:
-            out = (self.wavelet.data[p[0],p[1]] & (2 ** power))
-            self.test_data.data[p[0],p[1]] |= out
-            out = out >> power
+            if (accum[p[0],p[1]] + 2 ** power) <=  data[p[0],p[1]]:
+                out = 1
+                accum[p[0],p[1]] += 2 ** power
+                exit = False
+            else:
+                out = 0
+            #out = (self.wavelet.data[p[0],p[1]] & (2 ** power))
+            #self.test_data.data[p[0],p[1]] |= out
+            #out = out >> power
             self.output_stream.append(out)
             
             
@@ -285,6 +298,19 @@ class SPIHT(object):
                 return False
             else:
                 return 1
+
+    def has_grandchilds(self, ij, typ = bool):
+        if ij*4 < (len(self.wavelet.data),len(self.wavelet.data[0])):
+            if typ == bool:
+                return True
+            else:
+                return 1
+        else:
+            if typ == bool:
+                return False
+            else:
+                return 1
+
     #outputs coefficient sign
     def out_sign(self, coeff):
         if self.wavelet.data[coeff[0],coeff[1]] > 0:
@@ -293,14 +319,17 @@ class SPIHT(object):
             return 1
         
     def sorting(self, n):
-        nextLSP = deque()                                                    
+        nextLSP = deque()
         newLIP = deque()
+        data = self.wavelet.data
+        zt_matrix = self.zero_tree_data
         #Check for each significant pixel on the LIP
         for ij in self.LIP:
-            out = self.S_n([ij], n)
+            #out = self.S_n([ij], n)
+            out = int((abs(data[ij[0],ij[1]]) & 2**n) > 0)
             self.output_stream.append(out)
             if out == 1:
-                self.test_data.data[ij[0],ij[1]] = (1 << n)
+                self.test_data.data[ij[0],ij[1]] = 2**n
                 nextLSP.append(ij)
                 self.output_stream.append(self.out_sign(ij))
                 if self.out_sign(ij) == 1:
@@ -313,30 +342,33 @@ class SPIHT(object):
         while self.LIS:
             ij = self.LIS.popleft()
         #Check for zerotree roots (2.2.1)
-            D, O, L = self.get_DOL(ij)
+            #D, O, L = self.get_DOL(ij)
+            O = self.get_O(ij)
             if ij.entry_type == 'A':
-                out = self.S_n(D,n)
+                #out = self.S_n(D,n)
+                out = int((zt_matrix[ij[0],ij[1]] >= n))
                 self.output_stream.append(out)
                 if out == 1:
                     for kl in O:
-                        out = self.S_n([kl],n)
+                        #out = self.S_n([kl],n)
+                        out = int((abs(data[kl[0],kl[1]]) & 2**n) > 0)
                         self.output_stream.append(out)
                         if out == 1:
                             nextLSP.append(kl)
-                            self.test_data.data[kl[0],kl[1]] = (1 << n)
+                            self.test_data.data[kl[0],kl[1]] = 2**n
                             self.output_stream.append(self.out_sign(kl))
-                            if self.out_sign(ij) == 1:
-                                self.test_data.data[ij[0],ij[1]] *= -1
+                            if self.out_sign(kl) == 1:
+                                self.test_data.data[kl[0],kl[1]] *= -1
                         else:
                             self.LIP.append(kl)
                 #Check if ij has grandsons, if not remove from LIS
-                    if L:
+                    if self.has_grandchilds(ij):
                         ij.entry_type = "B"
                         self.LIS.append(ij)
                 else:
                     newLIS.append(ij)
             else: #Entry is type B
-                out = self.S_n(L,n)
+                out = self.S_n(O,n)
                 self.output_stream += [out]
                 if out == 1:
                     for k in O:
@@ -347,11 +379,126 @@ class SPIHT(object):
         self.LIS = newLIS
         return nextLSP
     
+    def resolve_zero_tree(self):
+        data = self.wavelet.data
+        rows = self.wavelet.rows
+        cols = self.wavelet.cols
+        maxr = rows
+        maxc = cols
+        levels = self.wavelet.level
+        zt_matrix = np.zeros((rows,cols),np.uint32)
+        self.zero_tree_data = zt_matrix
+        code = """
+                #line 393 "spiht.py"
+                int ix,iy;
+                for(int i = 0; i < levels; ++i) {
+                    for(int c = (int)(cols / 2); c < cols; ++c) {
+                        for(int r = (int)(rows / 2); r < rows; ++r) {
+               zt_matrix(r,c) = floor(log(abs(data(r,c)))/log(2));
+                            ix = c * 2;
+                            iy = r * 2;
+                            if (ix < maxc && iy < maxr) {
+                                if(zt_matrix(iy,ix)>zt_matrix(r,c))
+                                    zt_matrix(r,c) = zt_matrix(iy,ix);
+                                ++iy;
+                                if(zt_matrix(iy,ix)>zt_matrix(r,c))
+                                    zt_matrix(r,c) = zt_matrix(iy,ix);
+                                ++ix;
+                                if(zt_matrix(iy,ix)>zt_matrix(r,c))
+                                    zt_matrix(r,c) = zt_matrix(iy,ix);
+                                --iy;
+                                if(zt_matrix(iy,ix)>zt_matrix(r,c))
+                                    zt_matrix(r,c) = zt_matrix(iy,ix);
+                            }
+                        }
+                    }
+                    for(int c = 0; c < (int)(cols / 2); ++c) {
+                        for(int r = (int)(rows / 2); r < rows; ++r) {
+               zt_matrix(r,c) = floor(log(abs(data(r,c)))/log(2));
+                            ix = c * 2;
+                            iy = r * 2;
+                            if (ix < maxc && iy < maxr) {
+                                if(zt_matrix(iy,ix)>zt_matrix(r,c))
+                                    zt_matrix(r,c) = zt_matrix(iy,ix);
+                                ++iy;
+                                if(zt_matrix(iy,ix)>zt_matrix(r,c))
+                                    zt_matrix(r,c) = zt_matrix(iy,ix);
+                                ++ix;
+                                if(zt_matrix(iy,ix)>zt_matrix(r,c))
+                                    zt_matrix(r,c) = zt_matrix(iy,ix);
+                                --iy;
+                                if(zt_matrix(iy,ix)>zt_matrix(r,c))
+                                    zt_matrix(r,c) = zt_matrix(iy,ix);
+                            }
+                        }
+                    }
+                    for(int c = (int)(cols / 2); c < cols; ++c) {
+                        for(int r = 0; r < (int)(rows / 2); ++r) {
+               zt_matrix(r,c) = floor(log(abs(data(r,c)))/log(2));
+                            ix = c * 2;
+                            iy = r * 2;
+                            if (ix < maxc && iy < maxr) {
+                                if(zt_matrix(iy,ix)>zt_matrix(r,c))
+                                    zt_matrix(r,c) = zt_matrix(iy,ix);
+                                ++iy;
+                                if(zt_matrix(iy,ix)>zt_matrix(r,c))
+                                    zt_matrix(r,c) = zt_matrix(iy,ix);
+                                ++ix;
+                                if(zt_matrix(iy,ix)>zt_matrix(r,c))
+                                    zt_matrix(r,c) = zt_matrix(iy,ix);
+                                --iy;
+                                if(zt_matrix(iy,ix)>zt_matrix(r,c))
+                                    zt_matrix(r,c) = zt_matrix(iy,ix);
+                            }
+                        }
+                    }
+                    rows /= 2;
+                    cols /= 2;
+                }
+                for(int c = 0; c < rows; ++c) {
+                    for(int r = 0; r < cols; ++r) {
+               zt_matrix(r,c) = floor(log(abs(data(r,c)))/log(2));
+                    }
+                }
+
+        """
+        weave.inline(code, 
+                     ['rows','cols','maxr','maxc','zt_matrix','data',
+                     'levels'],
+                     type_converters = converters.blitz,
+                     compiler = 'gcc',
+                     headers = ["<math.h>"])
+        #for i in range(level):
+        #    for c in range(cols / 2,cols):
+        #        for r in range(rows / 2,rows):
+        #            zt_matrix[r,c] = 2 ** int(math.log(abs(data[r,c]),2))
+        #            O = self.get_O((r,c))
+        #            for o in O:
+        #                if zt_matrix[o[0],o[1]] > zt_matrix[r,c]:
+        #                    zt_matrix[r,c] = zt_matrix[o[0],o[1]]
+        #    for c in range(cols / 2):
+        #        for r in range(rows / 2,rows):
+        #            zt_matrix[r,c] = 2 ** int(math.log(max(abs(data)),2))
+        #            O = self.get_O((r,c))
+        #            for o in O:
+        #                if zt_matrix[o[0],o[1]] > zt_matrix[r,c]:
+        #                    zt_matrix[r,c] = zt_matrix[o[0],o[1]]
+        #    for c in range(cols / 2,cols):
+        #        for r in range(rows / 2):
+        #            zt_matrix[r,c] = 2 ** int(math.log(max(abs(data)),2))
+        #            O = self.get_O((r,c))
+        #            for o in O:
+        #                if zt_matrix[o[0],o[1]] > zt_matrix[r,c]:
+        #                    zt_matrix[r,c] = zt_matrix[o[0],o[1]]
+        #    rows /= 2
+        #    cols /= 2
+
     def compress(self):
         maxs = abs(self.wavelet.data)
         self.n = int(math.log(maxs.max(),2))
         n = self.n
         self.init()
+        self.resolve_zero_tree()
         bit_bucket = self.bpp * self.wavelet.rows * self.wavelet.cols
         self.output_stream=deque([],2*bit_bucket)
         while n >= 0 and len(self.output_stream) < bit_bucket:
@@ -526,17 +673,17 @@ def fvht_pack(wave, f_center, Lbpp, lbpp, alpha, c, gamma, delta = 0.01, display
             "payload":[]
         }
     """
-    filename = str(len(wave.data)) + "x" + str(len(wave.data[0])) + "_" + str(wave.level) +".dol"
-    if not d:
-        try:
-            f = open(filename,"r")
-            d = pickle.load(f)
-            f.close()
-            handle = True
-        except IOError as e:
-            d = {}
-            handle = True
-    update = len(d)
+    #filename = str(len(wave.data)) + "x" + str(len(wave.data[0])) + "_" + str(wave.level) +".dol"
+    #if not d:
+    #    try:
+    #        f = open(filename,"r")
+    #        d = pickle.load(f)
+    #        f.close()
+    #        handle = True
+    #    except IOError as e:
+    #        d = {}
+    #        handle = True
+    #update = len(d)
     codec = FVHT()
     codec.wavelet = wave
     codec.bpp = Lbpp
@@ -572,10 +719,10 @@ def fvht_pack(wave, f_center, Lbpp, lbpp, alpha, c, gamma, delta = 0.01, display
             "payload":[stream],
             "test_data":codec.test_data
             }
-    if len(codec.d_memory) > update and handle:
-        f = open(filename,"w+")
-        pickle.dump(codec.d_memory,f)
-        f.close()
+    #if len(codec.d_memory) > update and handle:
+    #    f = open(filename,"w+")
+    #    pickle.dump(codec.d_memory,f)
+    #    f.close()
     return pack
 
 def fvht_unpack(frame, display_progress=True, str_pr = "",d = {}, handle = True):
@@ -592,17 +739,17 @@ def fvht_unpack(frame, display_progress=True, str_pr = "",d = {}, handle = True)
     Returns:
         An uncompressed wavelet2D instance 
     """
-    filename = str(frame["rows"]) + "x" + str(frame["cols"]) + "_" + str(frame["decomp_level"]) +".dol" 
-    if not d:
-        try:
-            f = open(filename,"r")
-            d = pickle.load(f)
-            f.close()
-            handle = True
-        except IOError as e:
-            d = {}
-            handle = True
-    update = len(d)
+    #filename = str(frame["rows"]) + "x" + str(frame["cols"]) + "_" + str(frame["decomp_level"]) +".dol" 
+    #if not d:
+    #    try:
+    #        f = open(filename,"r")
+    #        d = pickle.load(f)
+    #        f.close()
+    #        handle = True
+    #    except IOError as e:
+    #        d = {}
+    #        handle = True
+    #update = len(d)
     codec = FVHT()
     data = np.zeros((frame["rows"],frame["cols"]),np.int32)
     codec.wavelet = wv.wavelet2D(data,frame["decomp_level"],frame["wave_type"])
@@ -619,10 +766,10 @@ def fvht_unpack(frame, display_progress=True, str_pr = "",d = {}, handle = True)
     codec.gamma = frame["gamma"]
     codec.P = frame["fovea_center"]
     codec.uncompress()
-    if len(codec.d_memory) > update and handle:
-        f = open(filename,"w+")
-        pickle.dump(codec.d_memory,f)
-        f.close()
+    #if len(codec.d_memory) > update and handle:
+    #    f = open(filename,"w+")
+    #    pickle.dump(codec.d_memory,f)
+    #    f.close()
     return codec.wavelet
 
 class FVHT(SPIHT):
@@ -659,11 +806,19 @@ class FVHT(SPIHT):
     
     def bitplane_encoding(self, power):
         newLSP = deque()
+        data = self.wavelet.data
+        accum = self.test_data.data
         for p in self.LSP:
             if self.calculate_fovea_w(p) >= self.get_current_bpp():
-                out = (self.wavelet.data[p[0],p[1]] & (2 ** power))
-                self.test_data.data[p[0],p[1]] |= out
-                out = out >> power
+                #out = (self.wavelet.data[p[0],p[1]] & (2 ** power))
+                #self.test_data.data[p[0],p[1]] |= out
+                #out = out >> power
+                if (accum[p[0],p[1]] + 2 ** power) <=  data[p[0],p[1]]:
+                    out = 1
+                    accum[p[0],p[1]] += 2 ** power
+                    exit = False
+                else:
+                    out = 0
                 self.output_stream.append(out)
                 self.amount_of_bits[tuple(p)] += 1
                 newLSP.append(p)
@@ -682,15 +837,19 @@ class FVHT(SPIHT):
     def sorting(self, n):
         nextLSP = deque()                                                    
         newLIP = deque()
+        data = self.wavelet.data
+        zt_matrix = self.zero_tree_data
+
         #Check for each significant pixel on the LIP
         dif = deque()
         for ij in self.LIP:
             if self.calculate_fovea_w(ij) >= self.get_current_bpp():
                 dif.append(ij)
-                out = self.S_n([ij], n)
+                out = int((abs(data[ij[0],ij[1]]) & 2**n) > 0)
+                #out = self.S_n([ij], n)
                 self.output_stream.append(out)
                 if out == 1:
-                    self.test_data.data[ij[0],ij[1]] = (1 << n)
+                    self.test_data.data[ij[0],ij[1]] = (2 ** n)
                     nextLSP.append(ij)
                     self.output_stream.append(self.out_sign(ij))
                     if self.out_sign(ij) == 1:
@@ -706,32 +865,35 @@ class FVHT(SPIHT):
         while self.LIS:
             ij = self.LIS.popleft()
         #Check for zerotree roots (2.2.1)
-            D, O, L = self.get_DOL(ij)
+            #D, O, L = self.get_DOL(ij)
+            O = self.get_O(ij)
             if ij.entry_type == 'A':
-                out = self.S_n(D,n)
+                #out = self.S_n(D,n)
+                out = int((zt_matrix[ij[0],ij[1]] >= n))
                 self.output_stream.append(out)
                 if out == 1:
                     for kl in O:
-                        out = self.S_n([kl],n)
+                        #out = self.S_n([kl],n)
+                        out = int((abs(data[kl[0],kl[1]]) & 2**n) > 0)
                         self.output_stream.append(out)
                         if out == 1:
                             if self.calculate_fovea_w(kl) >= self.get_current_bpp():
                                 nextLSP.append(kl)
                                 dif.append(kl)
-                                self.test_data.data[kl[0],kl[1]] = (1 << n)
+                                self.test_data.data[kl[0],kl[1]] = 2 ** n
                                 self.output_stream.append(self.out_sign(kl))
                                 if self.out_sign(kl) == 1:
                                     self.test_data.data[kl[0],kl[1]] *= -1
                         else:
                             self.LIP.append(kl)
                 #Check if ij has grandsons, if not remove from LIS
-                    if L:
+                    if self.has_grandchilds(ij):
                         ij.entry_type = "B"
                         self.LIS.append(ij)
                 else:
                     newLIS.append(ij)
             else: #Entry is type B
-                out = self.S_n(L,n)
+                out = self.S_n(O,n)
                 self.output_stream += [out]
                 if out == 1:
                     for k in O:
@@ -751,10 +913,11 @@ class FVHT(SPIHT):
         bit_bucket = self.Lbpp * self.wavelet.rows * self.wavelet.cols
         self.output_stream=deque([],2*bit_bucket)
         self.calculate_fovea_length()
+        self.resolve_zero_tree()
         self.amount_of_bits = np.zeros((len(self.wavelet.data), len(self.wavelet.data[0])))
         self.check = deque()
         test = deque()
-        k = self.printFoveaWindow()
+        #k = self.printFoveaWindow()
         while n >= 0 and len(self.output_stream) < bit_bucket:
             print "Sorting...{0}".format(len(self.output_stream)/float(bit_bucket))
             newLSP = self.sorting(n)
@@ -940,7 +1103,7 @@ class FVHT(SPIHT):
         return window
             
 def quant(wavelet,delta):
-    iw = np.zeros((len(wavelet.data),len(wavelet.data[0])),np.int)
-    iw= np.array(np.trunc(wavelet.data / delta), np.int)
+    iw = np.zeros((len(wavelet.data),len(wavelet.data[0])),np.int64)
+    iw= np.array(np.trunc(wavelet.data / delta), np.int64)
     wavelet.data = iw
     return wavelet

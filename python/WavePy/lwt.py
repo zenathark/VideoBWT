@@ -43,8 +43,8 @@ def icdf97(wave, in_place = True):
     if not isinstance(wave, wv.wavelet2D):
         raise TypeError, "Signal expected as wavelet2D"
     signal = wave.data.copy()
-    signal.dtype = np.float32
-    signal[:] = wave.data
+    #signal.dtype = np.float32
+    #signal[:] = wave.data
     signal = normal_inverse(signal,wave.level,1.149604398,(-0.4435068522,-0.8829110762,0.05298011854,1.586134342))
     return signal
 
