@@ -1,4 +1,5 @@
 from scipy import *
+from WavePy.tools import *
 
 class speck(object):
 
@@ -17,9 +18,11 @@ class speck(object):
     def __init__(self, wavelet):
         wv = wavelet
         dt = wavelet.data
+        LIS = CircularStack(wv.cols * wv.rows)
+        LSP = CircularStack(wv.cols * wv.rows)
         
     def initialization(self):
-        X = wv.get_morton_order(self.wv.rows * self.wv.cols)
+        X = self.wv.get_morton_order(self.wv.rows * self.wv.cols)
         self.LSP = []
         s_size = (self.wv.row / 2**wv.level * self.wv.cols/ 2**wv.level)
         self.S = X[:s_size-1]
