@@ -6,7 +6,7 @@ Created on 02/06/2012
 import numpy as np
 from numpy import array 
 import math
-import cv
+import cv2
 import threading
 from collections import deque
 
@@ -195,8 +195,6 @@ class wavelet2D(object):
         #cv.ShowImage(name,cv.fromarray(w.copy()))
         #cv.WaitKey(0)
         #cv.DestroyWindow(name)
-        import pylab
-        pylab.imshow(w)
         return w
 
 class WindowManager(threading.Thread):
@@ -209,10 +207,10 @@ class WindowManager(threading.Thread):
         self.num = num
 
     def run(self):
-        cv.ShowImage(self.name,self.img)
+        cv2.imshow(self.name,self.img)
         while True:
-            key = cv.WaitKey(0)
-            cv.DestroyWindow(self.name)
+            key = cv2.waitKey([0])
+            cv2.destroyWindow(self.name)
             print self.name + " destroyed..."
             break
 
@@ -264,7 +262,7 @@ class vector(object):
         return self.data[index]
 
 def LoadImageRGB(filename):
-    mtx = cv.LoadImageM(filename)
+    mtx = cv2.imread(filename)
     return splitRGB(mtx)
 
 def splitRGB(image):
