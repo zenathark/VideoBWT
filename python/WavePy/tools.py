@@ -3,6 +3,7 @@ Created on 18/04/2013
 
 @author: JuanCarlos
 '''
+from scipy import *
 
 class CircularStack(object):
     '''
@@ -42,3 +43,8 @@ class CircularStack(object):
     def _get_next_tail(self):
         return (self.tail + 1) % self.size
         
+def quant(wavelet,delta):
+    #iw = zeros((len(wavelet.data),len(wavelet.data[0])),int64)
+    iw= array(trunc(wavelet.data / delta), int64)
+    wavelet.data = iw
+    return wavelet

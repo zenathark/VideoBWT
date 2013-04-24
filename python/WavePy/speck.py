@@ -1,5 +1,6 @@
 from scipy import *
 from WavePy.tools import *
+from WavePy.wavelet import *
 import math
 
 class speck(object):
@@ -25,7 +26,7 @@ class speck(object):
     def compress(self,wavelet, bpp):
         self.wv = wavelet
         self.dt = wavelet.data 
-        self.bit_bucket = bpp * self.wv.row * self.wv.cols * 8
+        self.bit_bucket = bpp * self.wv.rows * self.wv.cols * 8
         self.initialization()
         #sorting
         try:
@@ -39,17 +40,17 @@ class speck(object):
         return self.output
             
     def initialization(self):
-        X = self.wv.get_morton_order(self.wv.rows * self.wv.cols)
+        X = get_morton_order(self.wv.rows * self.wv.cols)
         self.LIS = CircularStack(self.wv.cols * self.wv.rows)
         self.LSP = CircularStack(self.wv.cols * self.wv.rows)
-        s_size = (self.wv.row / 2**self.wv.level * self.wv.cols/ 2**self.wv.level)
+        s_size = (self.wv.rows / 2**self.wv.level * self.wv.cols/ 2**self.wv.level)
         self.S = X[:s_size-1]
         del X[:s_size-1]
         self.I = X
         maxs = abs(self.wavelet.data)
         self.n = int(math.log(maxs.max(),2))
         self.LIS.push(self.S)
-        self.i_partition_size = (self.wv.row / 2**self.wv.level) ** 2
+        self.i_partition_size = (self.wv.rows / 2**self.wv.level) ** 2
 
     def S_n(self,S):
         pass

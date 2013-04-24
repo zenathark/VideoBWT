@@ -13,7 +13,7 @@ import pickle
 import lwt
 import dwt
 import math
-import cv
+import cv2
 
 def spiht_image_pack(img, wavename, level, bpp, mode = "bi.orth", delta = 0.01, display_progress = True, str_pr = "", d = {}, handle = True):
     if not isinstance(img,tuple):
