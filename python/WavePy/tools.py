@@ -21,9 +21,10 @@ class CircularStack(object):
         '''
         if size > 0:
             self.data = [0] * size
+            self.size = size
         self.index = 0
         self.tail = 0
-    
+        
     def push(self,data):
         next_tail = self._get_next_tail()
         if next_tail == self.index:

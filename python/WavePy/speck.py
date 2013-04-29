@@ -13,6 +13,7 @@ class speck(object):
 
     LIS = []
     LSP = []
+    nextLIS = []
     S = []
     I = []
     n = 0
@@ -30,30 +31,35 @@ class speck(object):
         self.initialization()
         #sorting
         try:
-            for i in self.LSP.data:
-                self.ProcessS(i)
+            last_list = self.LIS.tail
+            last_pixel = self.LSP.tail
+            while self.LIS.index != last_list:
+                l = self.LIS.pop()
+                self.ProcessS(l)
             self.ProcessI()
-            self.refinement()
+            self.refinement(last_pixel)
             self.n >>= 1
         except:
             pass
         return self.output
             
     def initialization(self):
-        X = get_morton_order(self.wv.rows * self.wv.cols)
+        X = get_z_order(self.wv.rows * self.wv.cols)
         self.LIS = CircularStack(self.wv.cols * self.wv.rows)
+        self.nextLIS = CircularStack(self.wv.cols * self.wv.rows)
         self.LSP = CircularStack(self.wv.cols * self.wv.rows)
         s_size = (self.wv.rows / 2**self.wv.level * self.wv.cols/ 2**self.wv.level)
         self.S = X[:s_size-1]
         del X[:s_size-1]
         self.I = X
-        maxs = abs(self.wavelet.data)
+        maxs = abs(self.wv.data)
         self.n = int(math.log(maxs.max(),2))
         self.LIS.push(self.S)
         self.i_partition_size = (self.wv.rows / 2**self.wv.level) ** 2
 
     def S_n(self,S):
-        pass
+        T = np.array([i.tolist() for i in S])
+        return int((abs(self.dt[T[:,0],T[:,1]]).max() >= self.n))
 
     def ProcessS(self,S):
         sn = self.S_n(S)
@@ -62,11 +68,10 @@ class speck(object):
             if len(S) == 1:
                 self.output += [self.sign(S)]
                 self.push(S)
-                #TODO erase S
             else:
                 self.CodeS(S)
-            
-        #TODO add S
+        else:
+            self.LIS.push(S)
     
     def CodeS(self,S):
         O = self.split(S)
@@ -167,12 +172,15 @@ class speck(object):
         else:
             raise EOFError
             
-    def refinement(self):
-        for i in self.LSP:
+    def refinement(self, end):
+        c = self.LSP.index
+        while c != end:
+            i = self.LSP.data[c]
             if (self.dt[i[0],i[1]] & self.n) > 0:
                 self.out(1)
             else:
                 self.out(0)
+            c = (c + 1) % self.LSP.size
                 
     def push(self, data):
         self.LSP.push(data)

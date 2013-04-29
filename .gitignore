@@ -1,0 +1,7 @@
+/bin
+*.pyc
+.classpath
+.project
+/Compression/.settings
+.project
+.pydevproject
