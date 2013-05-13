@@ -2,6 +2,7 @@ from scipy import *
 from WavePy.tools import *
 from WavePy.wavelet import *
 import math
+from numpy.numarray.numerictypes import Int
 
 class speck(object):
 
@@ -27,21 +28,25 @@ class speck(object):
     def compress(self,wavelet, bpp):
         self.wv = wavelet
         self.dt = wavelet.data 
-        self.bit_bucket = bpp * self.wv.rows * self.wv.cols * 8
+        self.bit_bucket = bpp * self.wv.rows * self.wv.cols
         self.initialization()
+        wise_bit = self.n
         #sorting
         try:
-            last_list = self.LIS.tail
-            last_pixel = self.LSP.tail
-            while self.LIS.index != last_list:
-                l = self.LIS.pop()
-                self.ProcessS(l)
-            self.ProcessI()
-            self.refinement(last_pixel)
-            self.n >>= 1
-        except:
-            pass
-        return self.output
+            while self.n > 0:
+                last_list = self.LIS.tail
+                last_pixel = self.LSP.tail
+                while self.LIS.index != last_list:
+                    l = self.LIS.pop()
+                    self.ProcessS(l)
+                self.ProcessI()
+                self.refinement(last_pixel)
+                self.n -= 1
+        except EOFError as e:
+            print type(e)
+            return [self.wv.cols, self.wv.rows, self.level, wise_bit, [self.output]]
+        print "Elegant!!"
+        return [self.wv.cols, self.wv.rows, self.level, wise_bit, [self.output]]
             
     def initialization(self):
         X = get_z_order(self.wv.rows * self.wv.cols)
@@ -49,8 +54,8 @@ class speck(object):
         self.nextLIS = CircularStack(self.wv.cols * self.wv.rows)
         self.LSP = CircularStack(self.wv.cols * self.wv.rows)
         s_size = (self.wv.rows / 2**self.wv.level * self.wv.cols/ 2**self.wv.level)
-        self.S = X[:s_size-1]
-        del X[:s_size-1]
+        self.S = X[:s_size]
+        del X[:s_size]
         self.I = X
         maxs = abs(self.wv.data)
         self.n = int(math.log(maxs.max(),2))
@@ -58,15 +63,18 @@ class speck(object):
         self.i_partition_size = (self.wv.rows / 2**self.wv.level) ** 2
 
     def S_n(self,S):
+        if len(S) == 0:
+            return False
         T = np.array([i.tolist() for i in S])
-        return int((abs(self.dt[T[:,0],T[:,1]]).max() >= self.n))
+        print len(S)
+        return int((abs(self.dt[T[:,0],T[:,1]]).max() >= 2 ** self.n))
 
     def ProcessS(self,S):
         sn = self.S_n(S)
-        self.output += [sn]
+        self.out(sn)
         if sn == 1:
             if len(S) == 1:
-                self.output += [self.sign(S)]
+                self.out(self.sign(S))
                 self.push(S)
             else:
                 self.CodeS(S)
@@ -74,13 +82,13 @@ class speck(object):
             self.LIS.push(S)
     
     def CodeS(self,S):
-        O = self.split(S)
+        O = self.splitList(S)
         for o in O:
             sn = self.S_n(o)
             self.output += [sn]
             if sn == 1:
                 if len(o) == 1:
-                    self.output += [self.sign(o)]
+                    self.out(self.sign(o))
                     self.push(o)
                 else:
                     self.CodeS(o)
@@ -94,64 +102,85 @@ class speck(object):
             self.CodeI()
 
     def CodeI(self):
-        part = self.splitList(self.I,self.i_size_partition)
-        self.i_size_partition = self.i_size_partition * 4
+        part = self.splitList(self.I,self.i_partition_size)
+        self.i_partition_size = self.i_partition_size * 4
         for i in range(3):
             self.ProcessS(part[i])
+        self.I = part[3]
         self.ProcessI()
-            
-    def iInitialization(self):
-        X = self.wv.get_morton_order(self.wv.rows * self.wv.cols)
+    
+    def iInitialization(self, width, height, level, wise_bit):
+        self.wv = wavelet2D(zeros((width,height), dtype=Int), level)
+        self.dt = self.wv.data
+        X = get_z_order(self.wv.rows * self.wv.cols)
         self.LIS = CircularStack(self.wv.cols * self.wv.rows)
+        self.nextLIS = CircularStack(self.wv.cols * self.wv.rows)
         self.LSP = CircularStack(self.wv.cols * self.wv.rows)
-        s_size = (self.wv.row / 2**self.wv.level * self.wv.cols/ 2**self.wv.level)
-        self.S = X[:s_size-1]
-        del X[:s_size-1]
+        s_size = (self.wv.rows / 2**self.wv.level * self.wv.cols/ 2**self.wv.level)
+        self.S = X[:s_size]
+        del X[:s_size]
         self.I = X
-        maxs = abs(self.wavelet.data)
-        self.n = int(math.log(maxs.max(),2))
+        self.n = wise_bit
         self.LIS.push(self.S)
-        self.i_partition_size = (self.wv.row / 2**self.wv.level) ** 2
-
+        self.i_partition_size = (self.wv.rows / 2**self.wv.level) ** 2
+    
+    def expand(self,stream, width, height, level, wise_bit):
+        self.iInitialization(width, height, level, wise_bit)
+        self.output = stream
+        #sorting
+        try:
+            while self.n > 0:
+                last_list = self.LIS.tail
+                last_pixel = self.LSP.tail
+                while self.LIS.index != last_list:
+                    l = self.LIS.pop()
+                    self.iProcessS(l)
+                self.iProcessI()
+                self.iRefinement(last_pixel)
+                self.n -= 1
+        except EOFError as e:
+            print type(e)
+            return self.wv
+        print "Elegant!!"
+        return self.wv
+    
     def iProcessS(self,S):
-        sn = self.S_n(S)
-        self.output += [sn]
+        sn = self.read()
         if sn == 1:
             if len(S) == 1:
-                self.output += [self.sign(S)]
+                self.dt[S[0][0],S[0][1]] = 2 ** self.n * -1 * self.read() 
                 self.push(S)
-                #TODO erase S
             else:
-                self.CodeS(S)
-            
-        #TODO add S
+                self.iCodeS(S)
+        else:
+            self.LIS.push(S)
     
     def iCodeS(self,S):
-        O = self.split(S)
+        O = self.splitList(S)
         for o in O:
-            sn = self.S_n(o)
-            self.output += [sn]
+            sn = self.read()
             if sn == 1:
                 if len(o) == 1:
-                    self.output += [self.sign(o)]
+                    self.dt[S[0][0],S[0][1]] = 2 ** self.n * -1 * self.read() 
                     self.push(o)
                 else:
-                    self.CodeS(o)
+                    self.iCodeS(o)
             else:
                 self.LIS.push(o)
         pass
-
+            
     def iProcessI(self):
-        sn = self.S_n(self.I)
+        sn = self.read()
         if sn == 1:
-            self.CodeI()
-
+            self.iCodeI()
+            
     def iCodeI(self):
-        part = self.splitList(self.I,self.i_size_partition)
-        self.i_size_partition = self.i_size_partition * 4
+        part = self.splitList(self.I,self.i_partition_size)
+        self.i_partition_size = self.i_partition_size * 4
         for i in range(3):
-            self.ProcessS(part[i])
-        self.ProcessI()
+            self.iProcessS(part[i])
+        self.I = part[3]
+        self.iProcessI()
     
     def sign(self,S):
         if S[0] >= 0:
@@ -161,14 +190,22 @@ class speck(object):
     
     def splitList(self,l, size = 0):
         if size == 0:
+            if len(l) % 4 != 0:
+                raise IndexError 
             size = int(len(l) / 4)
             return [l[i*size:(i+1)*size] for i in (0,1,2,3)]
         else:
-            return [l[i*size:(i+1)*size] for i in (0,1,2)] + l[:-size*3]
+            return [l[i*size:(i+1)*size] for i in (0,1,2)] + [l[:-size*3]]
         
     def out(self,data):
         if len(self.output) < self.bit_bucket:
             self.output += [data]
+        else:
+            raise EOFError
+    
+    def read(self):
+        if len(self.output) > 0:
+            return self.output.pop(0)
         else:
             raise EOFError
             
@@ -181,9 +218,17 @@ class speck(object):
             else:
                 self.out(0)
             c = (c + 1) % self.LSP.size
+            
+    def iRefinement(self, end):
+        c = self.LSP.index
+        while c != end:
+            i = self.LSP.data[c]
+            if (self.read()) > 0:
+                self.dt[i[0],i[1]] |= 2 ** self.n
+            c = (c + 1) % self.LSP.size
                 
     def push(self, data):
-        self.LSP.push(data)
+        self.LSP.push(data[0])
         
 class fv_speck(speck):
     

@@ -31,7 +31,7 @@ class CircularStack(object):
             raise OverflowError
         else:
             self.data[self.tail] = data
-            self.tail += 1
+            self.tail = next_tail
 
     def pop(self):
         if self.index == self.tail:

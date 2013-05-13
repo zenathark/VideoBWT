@@ -13,5 +13,6 @@ im = imread('d:/standard_test_images/cameraman.tif',IMREAD_GRAYSCALE)
 w = cdf97(im,4,False)
 q = quant(w,0.001)
 sp = speck()
-print sp.compress(q, 8)
+out = sp.compress(q,8)
+print len(out)
 
