@@ -1,3 +1,9 @@
+'''
+File: speck.py
+Author: Juan Carlos Galan Hernandez juan.galanhz@udlap.mx
+Description: This module calculates the compressed byte stream of a 2D image
+             using the SPECK algorithm 
+'''
 from scipy import *
 from WavePy.tools import *
 from WavePy.wavelet import *

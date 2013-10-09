@@ -5,3 +5,5 @@
 /Compression/.settings
 .project
 .pydevproject
+.DS_Store
+*.swp
