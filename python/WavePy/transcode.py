@@ -157,19 +157,21 @@ def compress_motion_speck(path, dest_path, bpp, dec_level=4,
     for c in range(info.frames):
         original_frame = cv2.imread(path + str(c) + ".png",
                                     cv2.CV_LOAD_IMAGE_GRAYSCALE)
-        original_frame = tools.zero_padding(original_frame)
+        frame = tools.zero_padding(original_frame)
         if is_key == 0:
-            frame = original_frame
+            p_frame = original_frame
             is_key = fixed_keyframe - 1
             key_frame = frame
             info.motion_vectors += [0]
         else:
-            frame, mvs = intraframe.encode_motion_frame(frame, key_frame,
-                                                        macroblock_size,
-                                                        info.full_size)
+            p_frame, mvs = intraframe.encode_motion_frame(frame,
+                                                          key_frame,
+                                                          macroblock_size,
+                                                          info.full_size)
             info.motion_vectors += [(mvs)]
             is_key -= 1
-        wavelet = lwt.cdf97(frame, dec_level)
+        wavelet = lwt.cdf97(p_frame, dec_level)
+        wavelet = tools.quant(wavelet, 1000)
         coded_frame = codec.compress(wavelet, bpp)
         stream = dict()
         stream["wise_bit"] = coded_frame[3]
