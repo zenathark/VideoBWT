@@ -33,7 +33,7 @@ def encode_motion_frame(frame, key_frame, window_size, region='FULL'):
     #frame size
     k_r, k_c = key_frame.shape
     #window size
-    r, c = window_size
+    r = c = window_size
     encoded_frame = np.zeros(frame.shape)
     motion_vectors = []
     for i, j in it.product(range(0, k_r, r), range(0, k_c, c)):
@@ -58,7 +58,7 @@ def fullsearch(window, window_coord, key_frame, region="FULL"):
 
     Kwargs:
         region: The column and row length of the region to be searched.
-        The strung 'FULL' causes the function to search over all the key frame.
+        The string 'FULL' causes the function to search over all the key frame.
         If an int is given, the function will delimite the search over an
         squared area with radius of region centered at win_coords.
 
@@ -75,7 +75,7 @@ def fullsearch(window, window_coord, key_frame, region="FULL"):
         y_t = key_frame.shape[0]
         x_t = key_frame.shape[1]
     else:
-        y_r, x_r = region
+        y_r = x_r = region
         #check if region search is not outside of the key_frame
         y_0 = y - y_r if (y - y_r) >= 0 else 0
         x_0 = x - x_r if (x - x_r) >= 0 else 0
@@ -129,7 +129,7 @@ def decode_motion_frame(error, motion_vectors, window_size, key_frame):
     #frame size
     k_r, k_c = key_frame.shape
     #window size
-    r, c = window_size
+    r = c = window_size
     decoded_frame = np.zeros(error.shape)
     #composed index for easy iteration
     index = zip(it.product(range(0, k_r, r), range(0, k_c, c)), motion_vectors)
