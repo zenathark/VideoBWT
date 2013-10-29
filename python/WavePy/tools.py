@@ -63,9 +63,9 @@ def zero_padding(signal, squared=True):
     pow_cols = int(np.ceil(np.log2(cols)))
     padded_signal = np.zeros((2 ** pow_rows, 2 ** pow_cols),
                              dtype=signal.dtype)
-    y_0 = pow_rows / 2
+    y_0 = (2 ** pow_rows - rows) / 2
     y_t = y_0 + signal.shape[0]
-    x_0 = pow_cols / 2
+    x_0 = (2 ** pow_cols - cols) / 2
     x_t = x_0 + signal.shape[1]
     padded_signal[y_0:y_t, x_0:x_t] = signal
     return padded_signal

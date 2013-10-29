@@ -159,7 +159,7 @@ def compress_motion_speck(path, dest_path, bpp, dec_level=4,
                                     cv2.CV_LOAD_IMAGE_GRAYSCALE)
         frame = tools.zero_padding(original_frame)
         if is_key == 0:
-            p_frame = original_frame
+            p_frame = frame
             is_key = fixed_keyframe - 1
             key_frame = frame
             info.motion_vectors += [0]
@@ -171,7 +171,7 @@ def compress_motion_speck(path, dest_path, bpp, dec_level=4,
             info.motion_vectors += [(mvs)]
             is_key -= 1
         wavelet = lwt.cdf97(p_frame, dec_level)
-        wavelet = tools.quant(wavelet, 1000)
+        wavelet = tools.quant(wavelet, 0.0001)
         coded_frame = codec.compress(wavelet, bpp)
         stream = dict()
         stream["wise_bit"] = coded_frame[3]
@@ -187,8 +187,8 @@ def compress_spiht_fullsearch(path, dest_path):
     print "TODO"
 
 if __name__ == '__main__':
-#    split_raw("/Users/juancgalan/video_test/akiyo_cif.mov",
-              # "/Users/juancgalan/Downloads/video_test/akiyo/")
+    # split_raw("/Users/juancgalan/video_test/akiyo_cif.mov",
+    #            "/Users/juancgalan/Downloads/video_test/akiyo/raw/")
     # decompress_fullsearch(
     #     "/Users/juancgalan/Downloads/video_test/akiyo/fullsearch/",
     #     "/Users/juancgalan/Downloads/video_test/akiyo/defullsearch/")

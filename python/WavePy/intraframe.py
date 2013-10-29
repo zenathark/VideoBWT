@@ -6,6 +6,7 @@
 ..  moduleauthor:: Juan Carlos Galan Hernandez <juan.galanhz@udlap.mx>
 
 """
+
 import itertools as it
 import numpy as np
 
@@ -75,7 +76,7 @@ def fullsearch(window, window_coord, key_frame, region="FULL"):
         y_t = key_frame.shape[0]
         x_t = key_frame.shape[1]
     else:
-        y_r = x_r = region
+        y_r = x_r = region - key_frame.shape[0]
         #check if region search is not outside of the key_frame
         y_0 = y - y_r if (y - y_r) >= 0 else 0
         x_0 = x - x_r if (x - x_r) >= 0 else 0
@@ -124,7 +125,7 @@ def MAE(w, kw):
 
 
 def decode_motion_frame(error, motion_vectors, window_size, key_frame):
-    '''This method decode an encoded frame using motion estimation
+    '''This method decode an encoded frame using motion estimation.
     '''
     #frame size
     k_r, k_c = key_frame.shape
