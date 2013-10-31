@@ -137,11 +137,6 @@ class speck(object):
         self.n = wise_bit
         self.LIS.push(self.S)
         self.i_partition_size = (self.wv.rows / 2 ** self.wv.level) ** 2
-        self.log = []
-        #self.logger = logging.getLogger('SPECK DECODER')
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.DEBUG)
-        self.logger.addHandler(ch)
         self._idx = 0
         self._logidx = 0
 
@@ -168,12 +163,10 @@ class speck(object):
 
     def iProcessS(self, S):
         sn = self.read()
-        self.followLog("ProcessS", "Sn", "S", len(S), sn)
         if sn == 1:
             if len(S) == 1:
                 sg = self.read()
                 self.createCoeff(S[0], sg)
-                self.followLog("ProcessS", "Sign", "S", len(S), sg)
                 self.push(S)
             else:
                 self.iCodeS(S)
@@ -184,12 +177,10 @@ class speck(object):
         O = self.splitList(S)
         for o in O:
             sn = self.read()
-            self.followLog("CodeS", "Sn", "S", len(S), sn)
             if sn == 1:
                 if len(o) == 1:
                     sg = self.read()
                     self.createCoeff(o[0], sg)
-                    self.followLog("CodeS", "Sign", "S", len(S), sg)
                     self.push(o)
                 else:
                     self.iCodeS(o)
@@ -199,12 +190,10 @@ class speck(object):
 
     def iProcessI(self):
         sn = self.read()
-        self.followLog("ProcessI", "Sn", "I", len(self.I), sn)
         if sn == 1:
             self.iCodeI()
 
     def iCodeI(self):
-        self.followLog("CodeI", "Sn", "I", len(self.I), self.i_partition_size)
         part = self.splitList(self.I, self.i_partition_size)
         self.i_partition_size = self.i_partition_size * 4
         for i in range(3):
