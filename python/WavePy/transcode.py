@@ -126,7 +126,7 @@ def compress_speck(path, dest_path, dec_level, bpp):
     codec = sk.speck()
     info.wavelet = "cdf97"
     info.wavelet_level = dec_level
-    info.frames = 10
+    info.frames = 3
     info.bpp = bpp
     for c in range(info.frames):
         frame = cv2.imread(path + str(c) + ".png",
@@ -162,7 +162,7 @@ def decompress_speck(path, dest_path):
                                    info.wavelet_rows, info.wavelet_level,
                                    frame["wise_bit"])
         iframe = lwt.icdf97(wavelet)
-        iframe = tools.aquant(iframe, 10000)
+        iframe = tools.aquant(iframe, 100000)
         iframe = tools.unpadding(iframe, (info.rows, info.cols))
         if not cv2.imwrite(dest_path + str(c) + ".png",
                             iframe, [cv2.cv.CV_IMWRITE_PNG_COMPRESSION, 0]):
@@ -341,11 +341,11 @@ if __name__ == '__main__':
     # decompress_fullsearch(
     #     "/Users/juancgalan/Downloads/video_test/akiyo/fullsearch/",
     #     "/Users/juancgalan/Downloads/video_test/akiyo/defullsearch/")
-    compress_speck(
-        "/Users/juancgalan/Downloads/video_test/akiyo/fullsearch/",
-        "/Users/juancgalan/Downloads/video_test/akiyo/speck/",
-        4,1)
-    # decompress_speck(
+    # compress_speck(
+    #     "/Users/juancgalan/Downloads/video_test/akiyo/fullsearch/",
     #     "/Users/juancgalan/Downloads/video_test/akiyo/speck/",
-    #     "/Users/juancgalan/Downloads/video_test/akiyo/despeck/",
-    #     )
+    #     4,1)
+    decompress_speck(
+        "/Users/juancgalan/Downloads/video_test/akiyo/speck/",
+        "/Users/juancgalan/Downloads/video_test/akiyo/despeck/",
+        )
