@@ -79,7 +79,7 @@ def quantize(signal, delta, **kw):
 
 def zero_padding(signal, squared=True):
     """Creates a new ndarray that """
-    _check_dim(signal, 2)
+    check_dim(signal, 2)
     rows, cols = signal.shape
     pow_rows = int(np.ceil(np.log2(rows)))
     pow_cols = int(np.ceil(np.log2(cols)))
@@ -135,7 +135,7 @@ def normalize(data, **kw):
         lower_bound = kw['lower_bound']
     if 'dtype' in kw:
         dtype = kw['dtype']
-    _check_ndarray(data)
+    check_ndarray(data)
     newdata = data - data.min()
     newdata = newdata / newdata.max()
     newdata = newdata * (upper_bound - lower_bound)
@@ -143,7 +143,7 @@ def normalize(data, **kw):
     return newdata.astype(dtype)
 
 
-def _check_ndarray(data):
+def check_ndarray(data):
     """Checks if the given data is an ndarray, if not raises an exception
 
     Args:
@@ -156,7 +156,7 @@ def _check_ndarray(data):
         raise TypeError("Argument of type numpy.ndarray expected")
 
 
-def _check_dim(data, dim):
+def check_dim(data, dim):
     """Checks if the data is an instance of numpy.ndarray and checks if match
     the given dimensions.
 
